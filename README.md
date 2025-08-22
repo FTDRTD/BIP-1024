@@ -20,7 +20,7 @@
 
 ## 工作原理
 
-1. 读取`english.txt`文件中的2048个BIP39单词
+1. 读取 `english.txt`文件中的2048个BIP39单词
 2. 将每个单词的索引号（1-2048）转换为11位二进制
 3. 将二进制位反转，使权重从低到高排列（1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024）
 4. 使用●（实心点）表示1，○（空心点）表示0
@@ -44,11 +44,10 @@
 
 ### 环境准备
 
-1.  安装 Python 3.6+
-2.  安装 ReportLab 3.0+
+1. 安装 Python 3.6+
+2. 安装 ReportLab 3.0+
 
 ### 安装依赖
-
 
 ```bash
 pip install reportlab
@@ -57,12 +56,13 @@ pip install reportlab
 ## 使用方法
 
 1. 确保所有必需文件在同一目录下：
+
    - `main.py`
    - `english.txt`
    - `DejaVuSans.ttf`
    - `DejaVuSans-Bold.ttf`
-
 2. 运行程序：
+
 ```bash
 python main.py
 ```
@@ -72,6 +72,7 @@ python main.py
 ## 输出格式说明
 
 PDF文档包含以下信息：
+
 - 标题：BIP39 Mnemonic DotMap (Manual Recovery Optimized)
 - 点图含义说明
 - 权重顺序说明（1 | 2 | 4 | 8 || 16 | 32 | 64 | 128 || 256 | 512 | 1024）
@@ -83,6 +84,7 @@ PDF文档包含以下信息：
 - **○** (空心点) = 0 = 该权重未被选中
 
 要手动恢复单词，需要：
+
 1. 找到对应的点图行
 2. 从左到右读取三个点图列
 3. 将●转换为1，○转换为0
@@ -93,29 +95,36 @@ PDF文档包含以下信息：
 ## 故障排除
 
 ### 字体文件未找到
+
 ```
 错误：字体文件 'DejaVuSans.ttf' 或 'DejaVuSans-Bold.ttf' 未找到！
 请确保这些文件和 main.py 在同一个文件夹下。
 ```
+
 **解决方法**：确保字体文件存在，或程序将自动回退到Helvetica字体。
 
 ### 英文单词文件未找到
+
 ```
 Error: 'english.txt' not found. Please ensure it is in the same directory as the script.
 ```
-**解决方法**：确保`english.txt`文件存在于程序目录中。
+
+**解决方法**：确保 `english.txt`文件存在于程序目录中。
 
 ### 单词数量不匹配
+
 ```
 Error: english.txt has X words (should be 2048).
 ```
-**解决方法**：确保`english.txt`包含完整的2048个BIP39单词。
+
+**解决方法**：确保 `english.txt`包含完整的2048个BIP39单词。
 
 ## 许可证
 
 本项目采用 [MIT License](LICENSE) 开源许可证。
 
 您可以自由地：
+
 - 使用、复制和修改代码
 - 商业使用
 - 分发原始或修改版本
@@ -125,8 +134,6 @@ Error: english.txt has X words (should be 2048).
 **重要提醒**：本项目仅供学习和研究使用。在使用BIP39相关功能时，请确保遵守当地法律法规和相关加密货币监管要求。
 
 ## 贡献
-
----
 
 [中文版本](README.md) | [English Version](README_EN.md)
 欢迎提交 Issue 和 Pull Request 来改进这个项目。
