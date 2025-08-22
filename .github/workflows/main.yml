@@ -3,54 +3,88 @@ name: Build Cross-Platform Releases
 on:
   push:
     tags:
-      - "v*" # 当推送 tag 时触发
+      - "v*" # 打 tag 时触发
   workflow_dispatch:
 
 jobs:
   # ------------------- Windows 构建 -------------------
   build-windows:
     runs-on: windows-latest
+    env:
+      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ---------- 检查文件是否存在 ----------
+      - name: Check if english.txt exists
+        run: |
+          if (Test-Path "english.txt") {
+            Write-Output "english.txt found"
+            Get-Content "english.txt" | Select-Object -First 5
+          } else {
+            Write-Output "english.txt not found"
+            Get-ChildItem -Name
+          }
+        shell: pwsh
+
+      # ---------- Windows pip 缓存 ----------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~\AppData\Local\pip\Cache
-          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt nuitka ttkbootstrap
 
-      # 动态查找 Tcl/Tk 库的路径
-      - name: Find Tcl/Tk paths
-        id: tcl-paths
-        shell: pwsh
+      # ---------- Dependency Walker 缓存 ----------
+      - name: Cache Dependency Walker
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64
+          key: dependency-walker-${{ runner.os }}-v1
+
+      - name: Install Dependency Walker
         run: |
-          $pythonPrefix = python -c "import sys; print(sys.prefix)"
-          echo "TCL_PATH=$pythonPrefix\tcl\tcl8.6" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          echo "TK_PATH=$pythonPrefix\tcl\tk8.6" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $dependsPath = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+          if (-not (Test-Path "$dependsPath\depends.exe")) {
+            New-Item -ItemType Directory -Path $dependsPath -Force
+            Invoke-WebRequest -Uri "https://www.dependencywalker.com/depends22_x64.zip" -OutFile "$dependsPath\depends22_x64.zip"
+            Expand-Archive -Path "$dependsPath\depends22_x64.zip" -DestinationPath $dependsPath -Force
+          }
+        shell: pwsh
+
+      - name: Verify Dependency Walker
+        run: |
+          dir "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+        shell: pwsh
 
       - name: Build with Nuitka
         shell: pwsh
         run: |
           nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter `
             --include-package-data=ttkbootstrap `
-            --include-data-dir="${{ steps.tcl-paths.outputs.TCL_PATH }}=tcl8.6" `
-            --include-data-dir="${{ steps.tcl-paths.outputs.TK_PATH }}=tk8.6" `
-            --include-data-file="english.txt=english.txt" `
-            --output-filename=bip39_recovery.exe bip39_recovery.py
+            --include-data-file=english.txt=english.txt `
+            --include-data-dir=.=. `
+            --output-filename=bip39_recovery.exe bip39_recovery.py 2>&1 | Tee-Object -FilePath nuitka.log
 
       - name: List files before upload
         run: dir
+
+      - name: Upload Nuitka log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuitka-log-windows
+          path: nuitka.log
 
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
@@ -65,41 +99,43 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ---------- 检查文件是否存在 ----------
+      - name: Check if english.txt exists
+        run: |
+          if [ -f "english.txt" ]; then
+            echo "english.txt found"
+            head -5 english.txt
+          else
+            echo "english.txt not found"
+            ls -la
+          fi
+
+      # ---------- Linux pip 缓存 ----------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 确保你有一个 Dockerfile，例如:
-      # FROM python:3.12-slim
-      # WORKDIR /app
-      # COPY requirements.txt .
-      # RUN pip install -r requirements.txt nuitka ttkbootstrap
-      # COPY . .
       - name: Build the Docker image
         run: docker build -t bip39-builder .
 
       - name: Run Nuitka inside Docker
         run: |
-          docker run --rm -v ${{ github.workspace }}:/app bip39-builder /bin/bash -c '
-            # 通过 Tcl 解释器可靠地找到 Tcl/Tk 库路径
-            TCL_LIBRARY_PATH=$(python3 -c "from tkinter import Tcl; r=Tcl(); print(r.eval(\"info library\"))")
-            TK_LIBRARY_PATH=$(python3 -c "from tkinter import Tcl; r=Tcl(); print(r.eval(\"set tk_library\"))")
-            
-            echo "Found Tcl library at: $TCL_LIBRARY_PATH"
-            echo "Found Tk library at: $TK_LIBRARY_PATH"
-
-            python3 -m nuitka \
-              --onefile \
-              --enable-plugin=tk-inter \
-              --include-package-data=ttkbootstrap \
-              --include-data-dir="$TCL_LIBRARY_PATH=tcl8.6" \
-              --include-data-dir="$TK_LIBRARY_PATH=tk8.6" \
-              --include-data-file="english.txt=english.txt" \
-              --output-filename=bip39_recovery.bin \
-              bip39_recovery.py
-          '
+          docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka \
+            --onefile \
+            --enable-plugin=tk-inter \
+            --include-package-data=ttkbootstrap \
+            --include-data-file=english.txt=english.txt \
+            --include-data-dir=.=. \
+            --output-filename=bip39_recovery.bin \
+            bip39_recovery.py
 
       - name: List files before upload
         run: ls -lh
@@ -117,39 +153,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      # ---------- 检查文件是否存在 ----------
+      - name: Check if english.txt exists
+        run: |
+          if [ -f "english.txt" ]; then
+            echo "english.txt found"
+            head -5 english.txt
+          else
+            echo "english.txt not found"
+            ls -la
+          fi
 
+      # ---------- macOS pip 缓存 ----------
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/Library/Caches/pip
           key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt nuitka ttkbootstrap
-
-      # 动态查找 Tcl/Tk 库的路径
-      - name: Find Tcl/Tk paths
-        id: tcl-paths
-        run: |
-          TCL_LIBRARY_PATH=$(python3 -c "from tkinter import Tcl; r=Tcl(); print(r.eval('info library'))")
-          TK_LIBRARY_PATH=$(python3 -c "from tkinter import Tcl; r=Tcl(); print(r.eval('set tk_library'))")
-          echo "TCL_PATH=$TCL_LIBRARY_PATH" >> $GITHUB_OUTPUT
-          echo "TK_PATH=$TK_LIBRARY_PATH" >> $GITHUB_OUTPUT
 
       - name: Build with Nuitka
         run: |
           python -m nuitka --onefile \
             --enable-plugin=tk-inter \
             --include-package-data=ttkbootstrap \
-            --include-data-dir="${{ steps.tcl-paths.outputs.TCL_PATH }}=tcl8.6" \
-            --include-data-dir="${{ steps.tcl-paths.outputs.TK_PATH }}=tk8.6" \
-            --include-data-file="english.txt=english.txt" \
+            --include-data-file=english.txt=english.txt \
+            --include-data-dir=.=. \
             --output-filename=bip39_recovery \
             bip39_recovery.py
 
@@ -162,33 +200,93 @@ jobs:
           name: bip39-recovery-macos
           path: bip39_recovery
 
-  # ------------------- 创建 Release -------------------
+  # ------------------- Release 创建 -------------------
   create-release:
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
-    # 仅在推送 tag 时才运行此任务
-    if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download all artifacts
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---------- 下载构建产物 ----------
+      - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/
+          name: bip39-recovery-windows
+          path: ./windows
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bip39-recovery-linux
+          path: ./linux
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bip39-recovery-macos
+          path: ./macos
 
       - name: List downloaded files
-        run: ls -R artifacts
+        run: ls -lh ./windows ./linux ./macos
 
+      # ---------- 重命名文件以便区分平台 ----------
       - name: Rename files for release
         run: |
-          mv artifacts/bip39-recovery-windows/bip39_recovery.exe ./bip39_recovery-windows.exe
-          mv artifacts/bip39-recovery-linux/bip39_recovery.bin ./bip39_recovery-linux
-          mv artifacts/bip39-recovery-macos/bip39_recovery ./bip39_recovery-macos
+          mv ./windows/bip39_recovery.exe ./bip39_recovery-windows.exe
+          mv ./linux/bip39_recovery.bin ./bip39_recovery-linux
+          mv ./macos/bip39_recovery ./bip39_recovery-macos
           chmod +x ./bip39_recovery-linux ./bip39_recovery-macos
 
+      # ---------- 生成 Release Tag ----------
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            git fetch --tags
+            latest_tag=$(git tag --sort=-v:refname | grep '^v' | head -n1)
+            if [ -z "$latest_tag" ]; then
+              new_tag="v1.0.0"
+            else
+              IFS='.' read -r major minor patch <<< "${latest_tag#v}"
+              patch=$((patch + 1))
+              new_tag="v$major.$minor.$patch"
+            fi
+            echo "tag_name=$new_tag" >> $GITHUB_OUTPUT
+          fi
+
+      # ---------- 创建 GitHub Release ----------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          name: "Release ${{ steps.tag.outputs.tag_name }}"
+          body: |
+            ## BIP39 Recovery Tool - Cross Platform Release
+
+            This release includes executables for Windows, Linux, and macOS.
+
+            ### Downloads:
+            - **Windows**: `bip39_recovery-windows.exe`
+            - **Linux**: `bip39_recovery-linux`
+            - **macOS**: `bip39_recovery-macos`
+
+            ### Changes:
+            - English wordlist (english.txt) is now embedded in the executable
+            - Cross-platform GUI support with ttkbootstrap
+            - Improved error handling and user experience
+
+            ### Usage:
+            1. Download the appropriate executable for your platform
+            2. Run the executable (no additional files needed)
+            3. Follow the GUI instructions for BIP39 seed recovery
+
           generate_release_notes: true
           files: |
             bip39_recovery-windows.exe
             bip39_recovery-linux
             bip39_recovery-macos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
