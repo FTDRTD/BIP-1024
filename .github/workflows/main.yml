@@ -6,12 +6,12 @@ on:
       - 'v*'   # 打 tag 时触发
   workflow_dispatch:
 
+# ------------------- Windows 构建 -------------------
 jobs:
-  # --- Windows 构建 ---
   build-windows:
     runs-on: windows-latest
     env:
-      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1  # 自动接受 Dependency Walker 下载
+      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1  # 自动下载 Dependency Walker
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,10 +29,7 @@ jobs:
       - name: Build with Nuitka
         shell: pwsh
         run: |
-          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter `
-            --include-package-data=ttkbootstrap `
-            --include-data-files=english.txt=./english.txt `
-            --output-filename=bip39_recovery.exe bip39_recovery.py
+          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt --output-filename=bip39_recovery.exe bip39_recovery.py
 
       - name: List files before upload
         run: dir
@@ -43,7 +40,7 @@ jobs:
           name: bip39-recovery-windows
           path: bip39_recovery.exe
 
-  # --- Linux 构建 ---
+# ------------------- Linux 构建 -------------------
   build-linux:
     runs-on: ubuntu-latest
     steps:
@@ -70,31 +67,3 @@ jobs:
         with:
           name: bip39-recovery-linux
           path: bip39_recovery.bin
-
-  # --- 创建 Release ---
-  create-release:
-    needs: [build-windows, build-linux]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: bip39-recovery-windows
-          path: ./windows
-
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: bip39-recovery-linux
-          path: ./linux
-
-      - name: List downloaded files
-        run: ls -lh ./windows ./linux
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            windows/bip39_recovery.exe
-            linux/bip39_recovery.bin
