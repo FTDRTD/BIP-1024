@@ -11,7 +11,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
-      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1
+      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1  # 自动下载 Dependency Walker
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,7 +29,8 @@ jobs:
       - name: Build with Nuitka
         shell: pwsh
         run: |
-          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt --output-filename=bip39_recovery.exe bip39_recovery.py
+          # 输出到根目录，确保 artifact 可以找到
+          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt --output-dir=. --output-filename=bip39_recovery.exe bip39_recovery.py
 
       - name: List files before upload
         run: dir
