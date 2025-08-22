@@ -1,5 +1,6 @@
 # BIP39 DotMap Generator
 
+[中文版本](README.md) | [English Version](README_EN.md)
 一个用于生成BIP39助记词点图的Python工具，专为物理雕刻和手动恢复场景优化。
 
 ## 功能特性
@@ -110,4 +111,7 @@ Error: english.txt has X words (should be 2048).
 
 ## 贡献
 
+---
+
+[中文版本](README.md) | [English Version](README_EN.md)
 欢迎提交Issue和Pull Request来改进这个项目。
