@@ -16,6 +16,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ---------- Windows pip 缓存 ----------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -26,6 +33,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt nuitka ttkbootstrap
 
+      # ---------- Dependency Walker 缓存 ----------
       - name: Cache Dependency Walker
         uses: actions/cache@v4
         with:
@@ -78,6 +86,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ---------- Linux pip 缓存 ----------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -104,6 +119,10 @@ jobs:
     needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---------- 下载构建产物 ----------
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -119,9 +138,30 @@ jobs:
       - name: List downloaded files
         run: ls -lh ./windows ./linux
 
+      # ---------- 生成 Release Tag ----------
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            git fetch --tags
+            latest_tag=$(git tag --sort=-v:refname | grep '^v' | head -n1)
+            if [ -z "$latest_tag" ]; then
+              new_tag="v1.0.0"
+            else
+              IFS='.' read -r major minor patch <<< "${latest_tag#v}"
+              patch=$((patch + 1))
+              new_tag="v$major.$minor.$patch"
+            fi
+            echo "tag_name=$new_tag" >> $GITHUB_OUTPUT
+          fi
+
+      # ---------- 创建 GitHub Release ----------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.tag_name }}
           generate_release_notes: true
           files: |
             windows/bip39_recovery.exe
