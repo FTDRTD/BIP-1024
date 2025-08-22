@@ -1,18 +1,27 @@
-# 1. 使用一个轻量的官方 Python 镜像作为基础环境
+# 1. 使用轻量 Python 官方镜像
 FROM python:3.12-slim
 
-# 2. 在容器内部创建一个工作目录
+# 2. 安装 Nuitka 打包 Linux 所需依赖（必须要有 patchelf）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        patchelf \
+        gcc \
+        g++ \
+        make \
+        && rm -rf /var/lib/apt/lists/*
+
+# 3. 创建工作目录
 WORKDIR /app
 
-# 3. 将依赖文件复制到容器中
+# 4. 先复制依赖文件
 COPY requirements.txt .
 
-# 4. 安装所有 Python 依赖
-# 使用 --no-cache-dir 可以减小镜像体积
-RUN pip install --no-cache-dir -r requirements.txt
+# 5. 安装 Python 依赖 + Nuitka
+RUN pip install --no-cache-dir -r requirements.txt nuitka
 
-# 5. 将你项目中的所有文件复制到容器的工作目录中
+# 6. 复制项目源码
 COPY . .
 
-# 注意：因为我们只是把这个 Docker 镜像当作一个“构建环境”来使用，
-# 而不是要直接运行一个服务，所以我们不需要设置 CMD 或 ENTRYPOINT。
+# ⚠️ 注意：
+# 这个镜像只是作为 GitHub Actions 里的“构建容器”，
+# 不设置 CMD/ENTRYPOINT（由 workflow 里的 docker run 决定要执行的命令）
