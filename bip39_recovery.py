@@ -14,9 +14,10 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QStackedWidget,
     QMessageBox,
+    QFrame,
 )
-from PySide6.QtGui import QFont, QIcon
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt
 
 # --- 词典：用于国际化 (i18n) - Unchanged ---
 LANGUAGES = {
@@ -100,6 +101,21 @@ LANGUAGES = {
 WORDLIST_FILE = "english.txt"
 VALID_INPUT_NUMBERS = {2**i for i in range(11)}
 
+# --- 主题调色板 ---
+Theme = {
+    "BACKGROUND": "#F5F5F5",
+    "CONTENT_BACKGROUND": "#FFFFFF",
+    "PRIMARY": "#007BFF",
+    "PRIMARY_HOVER": "#0056b3",
+    "SECONDARY": "#6c757d",
+    "SECONDARY_HOVER": "#545b62",
+    "SUCCESS": "#28a745",
+    "DANGER": "#dc3545",
+    "TEXT": "#333333",
+    "TEXT_SECONDARY": "#666666",
+    "BORDER": "#DEE2E6",
+}
+
 
 # --- 资源路径函数 - Unchanged ---
 def get_resource_path(relative_path):
@@ -118,9 +134,8 @@ class BIP39RecoveryApp(QMainWindow):
         super().__init__()
         self.wordlist = self.load_wordlist()
         if not self.wordlist:
-            sys.exit(1)  # Exit if wordlist fails to load
+            sys.exit(1)
 
-        # --- Application State ---
         self.mnemonic_length = 0
         self.current_word_index = 0
         self.recovered_words = []
@@ -129,14 +144,12 @@ class BIP39RecoveryApp(QMainWindow):
         self.current_lang = "zh"
         self.T = lambda key: LANGUAGES[self.current_lang].get(key, key)
 
-        # --- UI Setup ---
-        self.setFixedSize(650, 600)
+        self.setFixedSize(700, 650)
         self.setup_styles()
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        # --- Create Pages ---
         self.welcome_widget = QWidget()
         self.recovery_widget = QWidget()
         self.result_widget = QWidget()
@@ -152,20 +165,18 @@ class BIP39RecoveryApp(QMainWindow):
         self.update_ui_text()
 
     def show_message(self, level, title, message):
-        """Helper to show QMessageBox."""
         box = QMessageBox(self)
         box.setWindowTitle(title)
         box.setText(message)
-        if level == "error":
-            box.setIcon(QMessageBox.Icon.Critical)
-        elif level == "warning":
-            box.setIcon(QMessageBox.Icon.Warning)
-        else:
-            box.setIcon(QMessageBox.Icon.Information)
+        box.setIcon(
+            {
+                "error": QMessageBox.Icon.Critical,
+                "warning": QMessageBox.Icon.Warning,
+            }.get(level, QMessageBox.Icon.Information)
+        )
         box.exec()
 
     def load_wordlist(self):
-        """从文件加载BIP39词库。"""
         wordlist_path = get_resource_path(WORDLIST_FILE)
         if not os.path.exists(wordlist_path):
             self.show_message(
@@ -196,78 +207,145 @@ class BIP39RecoveryApp(QMainWindow):
             return None
 
     def setup_styles(self):
-        """Apply global styles using QSS."""
-        self.setStyleSheet("""
-            QWidget {
+        """应用全局样式表 (QSS)"""
+        self.setStyleSheet(f"""
+            QMainWindow, QWidget {{
+                background-color: {Theme["BACKGROUND"]};
                 font-family: 'Segoe UI', 'Microsoft YaHei', 'Helvetica';
                 font-size: 14px;
-            }
-            QLabel#HeaderLabel {
-                font-size: 24px;
-                font-weight: bold;
-            }
-            QLabel#ResultLabel {
+            }}
+            QFrame#Card {{
+                background-color: {Theme["CONTENT_BACKGROUND"]};
+                border-radius: 8px;
+                border: 1px solid {Theme["BORDER"]};
+            }}
+            QLabel {{
+                color: {Theme["TEXT"]};
+            }}
+            QLabel#HeaderLabel {{
+                font-size: 26px;
+                font-weight: 600;
+                color: {Theme["TEXT"]};
+            }}
+            QLabel#PromptLabel {{
+                color: {Theme["TEXT_SECONDARY"]};
+            }}
+            QLabel#ResultLabel {{
                 font-family: 'Courier New', 'monospace';
                 font-size: 18px;
                 font-weight: bold;
-                color: #005a9e;
-            }
-            QLabel#ErrorLabel {
-                color: #D32F2F;
-            }
-            QPushButton {
-                padding: 10px;
-                border: 1px solid #ADADAD;
-                border-radius: 4px;
-                background-color: #F0F0F0;
-            }
-            QPushButton:hover {
-                background-color: #E0E0E0;
-            }
-            QPushButton#PrimaryButton {
-                background-color: #0078D7;
+                color: {Theme["SUCCESS"]};
+            }}
+            QLabel#ErrorLabel {{
+                color: {Theme["DANGER"]};
+                font-weight: 500;
+            }}
+            QPushButton {{
+                min-height: 40px;
+                font-size: 15px;
+                font-weight: 500;
+                border-radius: 6px;
+                border: 1px solid {Theme["BORDER"]};
+                background-color: {Theme["CONTENT_BACKGROUND"]};
+            }}
+            QPushButton:hover {{
+                background-color: #f8f9fa;
+            }}
+            QPushButton#PrimaryButton {{
+                background-color: {Theme["PRIMARY"]};
                 color: white;
                 border: none;
-            }
-            QPushButton#PrimaryButton:hover {
-                background-color: #005a9e;
-            }
-            QLineEdit, QTextEdit {
-                border: 1px solid #ADADAD;
-                border-radius: 4px;
-                padding: 5px;
-            }
-            QTextEdit {
+            }}
+            QPushButton#PrimaryButton:hover {{
+                background-color: {Theme["PRIMARY_HOVER"]};
+            }}
+            QPushButton#QuitButton {{
+                background-color: {Theme["SECONDARY"]};
+                color: white;
+                border: none;
+            }}
+            QPushButton#QuitButton:hover {{
+                background-color: {Theme["SECONDARY_HOVER"]};
+            }}
+            QLineEdit, QTextEdit {{
+                border: 1px solid {Theme["BORDER"]};
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 14px;
+                background-color: #FFFFFF;
+            }}
+            QLineEdit:focus, QTextEdit:focus {{
+                border-color: {Theme["PRIMARY"]};
+            }}
+            QTextEdit {{
                 font-family: 'Courier New', monospace;
-            }
+            }}
+            QFrame#LangSwitcher {{
+                border: 1px solid {Theme["BORDER"]};
+                border-radius: 6px;
+            }}
+            QPushButton#LangButton {{
+                border: none;
+                min-height: 28px;
+                font-size: 13px;
+                padding: 5px 15px;
+            }}
+            QPushButton#LangButton[active="true"] {{
+                background-color: {Theme["PRIMARY"]};
+                color: white;
+            }}
         """)
 
-    # --- Page Creation ---
+    def create_page_layout(self, parent_widget):
+        """创建标准页面布局：居中的卡片+语言切换器"""
+        page_layout = QVBoxLayout(parent_widget)
+        page_layout.setContentsMargins(0, 10, 0, 10)
 
-    def create_language_switcher(self, layout):
-        """Creates and adds a language switcher to the given layout."""
-        lang_layout = QHBoxLayout()
-        lang_layout.addStretch()  # Pushes buttons to the right
+        # 语言切换器
+        lang_switcher_layout = QHBoxLayout()
+        lang_switcher_layout.addStretch()
+        lang_switcher_frame = QFrame()
+        lang_switcher_frame.setObjectName("LangSwitcher")
+        lang_switcher_hbox = QHBoxLayout(lang_switcher_frame)
+        lang_switcher_hbox.setContentsMargins(0, 0, 0, 0)
+        lang_switcher_hbox.setSpacing(0)
 
-        en_button = QPushButton("English")
-        en_button.setFixedSize(80, 30)
-        en_button.clicked.connect(lambda: self.set_language("en"))
-        lang_layout.addWidget(en_button)
+        self.en_button = QPushButton("English")
+        self.en_button.setObjectName("LangButton")
+        self.en_button.setProperty("active", self.current_lang == "en")
+        self.en_button.clicked.connect(lambda: self.set_language("en"))
+        lang_switcher_hbox.addWidget(self.en_button)
 
-        zh_button = QPushButton("中文")
-        zh_button.setFixedSize(80, 30)
-        zh_button.clicked.connect(lambda: self.set_language("zh"))
-        lang_layout.addWidget(zh_button)
+        self.zh_button = QPushButton("中文")
+        self.zh_button.setObjectName("LangButton")
+        self.zh_button.setProperty("active", self.current_lang == "zh")
+        self.zh_button.clicked.connect(lambda: self.set_language("zh"))
+        lang_switcher_hbox.addWidget(self.zh_button)
 
-        layout.addLayout(lang_layout)
+        lang_switcher_layout.addWidget(lang_switcher_frame)
+        lang_switcher_layout.addSpacing(20)
+        page_layout.addLayout(lang_switcher_layout)
+
+        # 居中卡片布局
+        centered_layout = QHBoxLayout()
+        centered_layout.addStretch()
+        card_frame = QFrame()
+        card_frame.setObjectName("Card")
+        card_frame.setFixedWidth(550)
+        card_layout = QVBoxLayout(card_frame)
+        card_layout.setContentsMargins(40, 40, 40, 40)
+        card_layout.setSpacing(20)
+        centered_layout.addWidget(card_frame)
+        centered_layout.addStretch()
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(centered_layout)
+        page_layout.addStretch(2)
+
+        return card_layout
 
     def create_welcome_page(self):
-        layout = QVBoxLayout(self.welcome_widget)
-        layout.setContentsMargins(40, 20, 40, 20)
-        layout.setSpacing(15)
-
-        self.create_language_switcher(layout)
-        layout.addStretch(1)  # Add space
+        layout = self.create_page_layout(self.welcome_widget)
 
         self.welcome_header = QLabel()
         self.welcome_header.setObjectName("HeaderLabel")
@@ -275,6 +353,7 @@ class BIP39RecoveryApp(QMainWindow):
         layout.addWidget(self.welcome_header)
 
         self.select_prompt = QLabel()
+        self.select_prompt.setObjectName("PromptLabel")
         self.select_prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.select_prompt)
         layout.addSpacing(20)
@@ -291,30 +370,26 @@ class BIP39RecoveryApp(QMainWindow):
         self.button24.clicked.connect(lambda: self.start_recovery(24))
         layout.addWidget(self.button24)
 
-        layout.addStretch(2)
+        layout.addStretch()
 
         self.offline_warning = QLabel()
+        self.offline_warning.setObjectName("PromptLabel")
         self.offline_warning.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.offline_warning.setStyleSheet("color: grey;")
         layout.addWidget(self.offline_warning)
 
     def create_recovery_page(self):
-        layout = QVBoxLayout(self.recovery_widget)
-        layout.setContentsMargins(40, 20, 40, 20)
-
-        self.create_language_switcher(layout)
+        layout = self.create_page_layout(self.recovery_widget)
 
         self.recovery_title_label = QLabel()
         self.recovery_title_label.setObjectName("HeaderLabel")
         layout.addWidget(self.recovery_title_label)
 
-        # Input Frame
         input_layout = QHBoxLayout()
         self.enter_num_label = QLabel()
         input_layout.addWidget(self.enter_num_label)
         self.number_entry = QLineEdit()
         self.number_entry.setFixedWidth(120)
-        self.number_entry.returnPressed.connect(self.add_number)  # Enter key submits
+        self.number_entry.returnPressed.connect(self.add_number)
         input_layout.addWidget(self.number_entry)
         self.add_button = QPushButton()
         self.add_button.setObjectName("PrimaryButton")
@@ -336,25 +411,19 @@ class BIP39RecoveryApp(QMainWindow):
         self.next_word_button.clicked.connect(self.process_next_word)
         layout.addWidget(self.next_word_button)
 
-        layout.addSpacing(20)
+        layout.addSpacing(15)
 
         self.recovered_words_header_label = QLabel()
+        self.recovered_words_header_label.setObjectName("PromptLabel")
         layout.addWidget(self.recovered_words_header_label)
 
         self.recovered_words_display = QTextEdit()
         self.recovered_words_display.setReadOnly(True)
-        self.recovered_words_display.setFixedHeight(120)
+        self.recovered_words_display.setFixedHeight(80)
         layout.addWidget(self.recovered_words_display)
 
-        layout.addStretch()
-
     def create_result_page(self):
-        layout = QVBoxLayout(self.result_widget)
-        layout.setContentsMargins(40, 20, 40, 20)
-        layout.setSpacing(15)
-
-        self.create_language_switcher(layout)
-        layout.addStretch(1)
+        layout = self.create_page_layout(self.result_widget)
 
         self.result_header = QLabel()
         self.result_header.setObjectName("HeaderLabel")
@@ -362,12 +431,13 @@ class BIP39RecoveryApp(QMainWindow):
         layout.addWidget(self.result_header)
 
         self.result_prompt = QLabel()
+        self.result_prompt.setObjectName("PromptLabel")
         self.result_prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.result_prompt)
 
         self.result_text = QTextEdit()
         self.result_text.setReadOnly(True)
-        self.result_text.setFixedHeight(150)
+        self.result_text.setFixedHeight(120)
         layout.addWidget(self.result_text)
 
         self.security_note = QLabel()
@@ -375,46 +445,45 @@ class BIP39RecoveryApp(QMainWindow):
         self.security_note.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.security_note)
 
-        layout.addStretch(1)
+        layout.addSpacing(20)
 
         self.restart_button = QPushButton()
+        self.restart_button.setObjectName("PrimaryButton")
         self.restart_button.clicked.connect(
             lambda: self.stacked_widget.setCurrentWidget(self.welcome_widget)
         )
         layout.addWidget(self.restart_button)
 
         self.quit_button = QPushButton()
+        self.quit_button.setObjectName("QuitButton")
         self.quit_button.clicked.connect(self.close)
         layout.addWidget(self.quit_button)
 
-    # --- Logic & Control ---
-
     def set_language(self, lang_code):
-        """Sets display language and updates all UI text."""
         self.current_lang = lang_code
         self.T = lambda key: LANGUAGES[self.current_lang].get(key, key)
+        self.en_button.setProperty("active", lang_code == "en")
+        self.zh_button.setProperty("active", lang_code == "zh")
+        # 刷新样式以应用active状态
+        self.style().unpolish(self.en_button)
+        self.style().polish(self.en_button)
+        self.style().unpolish(self.zh_button)
+        self.style().polish(self.zh_button)
         self.update_ui_text()
 
     def update_ui_text(self):
-        """Update all text elements in the UI based on the current language."""
         self.setWindowTitle(self.T("window_title"))
-
-        # Welcome Page
         self.welcome_header.setText(self.T("welcome_header"))
         self.select_prompt.setText(self.T("select_length_prompt"))
         self.button12.setText(self.T("12_words"))
         self.button18.setText(self.T("18_words"))
         self.button24.setText(self.T("24_words"))
         self.offline_warning.setText(self.T("offline_warning"))
-
-        # Recovery Page
         self.enter_num_label.setText(self.T("enter_number_label"))
         self.add_button.setText(self.T("add_number_button"))
         self.next_word_button.setText(self.T("confirm_and_next_button"))
         self.recovered_words_header_label.setText(self.T("recovered_words_header"))
-        self.update_recovery_display()  # Update dynamic text
-
-        # Result Page
+        self.update_recovery_display()
         self.result_header.setText(self.T("recovery_complete_header"))
         self.result_prompt.setText(self.T("your_seed_phrase_is"))
         self.security_note.setText(self.T("security_note"))
@@ -422,7 +491,6 @@ class BIP39RecoveryApp(QMainWindow):
         self.quit_button.setText(self.T("quit_button"))
 
     def start_recovery(self, length):
-        """Starts the recovery process for a given mnemonic length."""
         self.mnemonic_length = length
         self.current_word_index = 0
         self.recovered_words = []
@@ -432,13 +500,11 @@ class BIP39RecoveryApp(QMainWindow):
         self.number_entry.setFocus()
 
     def add_number(self):
-        """Processes the number entered by the user."""
         try:
             num_str = self.number_entry.text().strip()
             if not num_str:
                 return
             num = int(num_str)
-
             if num not in VALID_INPUT_NUMBERS:
                 self.show_message(
                     "warning",
@@ -447,7 +513,6 @@ class BIP39RecoveryApp(QMainWindow):
                 )
                 self.number_entry.clear()
                 return
-
             if num in self.current_word_inputs:
                 self.show_message(
                     "warning",
@@ -457,7 +522,6 @@ class BIP39RecoveryApp(QMainWindow):
             else:
                 self.current_word_inputs.append(num)
                 self.current_word_sum += num
-
             self.number_entry.clear()
             self.update_recovery_display()
         except ValueError:
@@ -469,47 +533,42 @@ class BIP39RecoveryApp(QMainWindow):
             self.number_entry.clear()
 
     def process_next_word(self):
-        """Confirms the current word and moves to the next one."""
         if not self.current_word_inputs:
             self.show_message(
                 "warning", self.T("no_input_title"), self.T("no_input_warning")
             )
             return
-
         word_index = self.current_word_sum - 1
         if 0 <= word_index < 2048:
             word = self.wordlist[word_index]
             self.recovered_words.append(word)
             self.current_word_index += 1
-
             if self.current_word_index >= self.mnemonic_length:
                 self.show_final_result()
             else:
                 self.reset_current_word()
                 self.update_recovery_display()
+                self.number_entry.setFocus()
         else:
             self.show_message(
                 "error", self.T("sum_error_title"), self.T("sum_error_message")
             )
 
     def reset_current_word(self):
-        """Resets the state for recovering the next word."""
         self.current_word_sum = 0
         self.current_word_inputs = []
-        self.number_entry.clear()
+        if hasattr(self, "number_entry"):
+            self.number_entry.clear()
 
     def update_recovery_display(self):
-        """Updates all dynamic labels on the recovery page."""
         title_text = self.T("recovering_word_title").format(
             current=self.current_word_index + 1, total=self.mnemonic_length
         )
         self.recovery_title_label.setText(title_text)
-
         inputs_str = ", ".join(map(str, sorted(self.current_word_inputs)))
         self.current_inputs_label.setText(
             self.T("entered_numbers_label").format(numbers=inputs_str)
         )
-
         status_text = ""
         if self.current_word_sum > 0:
             word_index = self.current_word_sum - 1
@@ -527,11 +586,9 @@ class BIP39RecoveryApp(QMainWindow):
         self.current_word_label.setText(
             self.T("current_word_label").format(status=status_text)
         )
-
         self.recovered_words_display.setPlainText(" ".join(self.recovered_words))
 
     def show_final_result(self):
-        """Displays the fully recovered mnemonic phrase."""
         final_phrase = " ".join(self.recovered_words)
         self.result_text.setPlainText(final_phrase)
         self.stacked_widget.setCurrentWidget(self.result_widget)
