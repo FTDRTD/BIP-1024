@@ -3,15 +3,15 @@ name: Build Cross-Platform Releases
 on:
   push:
     tags:
-      - 'v*'   # 打 tag 时触发
+      - "v*" # 打 tag 时触发
   workflow_dispatch:
 
-# ------------------- Windows 构建 -------------------
 jobs:
+  # ------------------- Windows 构建 -------------------
   build-windows:
     runs-on: windows-latest
     env:
-      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1  # 自动下载 Dependency Walker
+      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,21 +19,51 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt nuitka ttkbootstrap
 
+      - name: Cache Dependency Walker
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64
+          key: dependency-walker-${{ runner.os }}-v1
+
+      - name: Install Dependency Walker
+        run: |
+          $dependsPath = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+          if (-not (Test-Path "$dependsPath\depends.exe")) {
+            New-Item -ItemType Directory -Path $dependsPath -Force
+            Invoke-WebRequest -Uri "https://www.dependencywalker.com/depends22_x64.zip" -OutFile "$dependsPath\depends22_x64.zip"
+            Expand-Archive -Path "$dependsPath\depends22_x64.zip" -DestinationPath $dependsPath -Force
+          }
+        shell: pwsh
+
+      - name: Verify Dependency Walker
+        run: |
+          dir "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+        shell: pwsh
+
       - name: Build with Nuitka
         shell: pwsh
         run: |
-          # 输出到根目录，确保 artifact 可以找到
-          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt --output-dir=. --output-filename=bip39_recovery.exe bip39_recovery.py
+          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter `
+            --include-package-data=ttkbootstrap `
+            --include-data-files=english.txt=./english.txt `
+            --output-filename=bip39_recovery.exe bip39_recovery.py 2>&1 | Tee-Object -FilePath nuitka.log
 
       - name: List files before upload
         run: dir
+
+      - name: Upload Nuitka log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuitka-log
+          path: nuitka.log
 
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
@@ -41,7 +71,7 @@ jobs:
           name: bip39-recovery-windows
           path: bip39_recovery.exe
 
-# ------------------- Linux 构建 -------------------
+  # ------------------- Linux 构建 -------------------
   build-linux:
     runs-on: ubuntu-latest
     steps:
@@ -69,19 +99,17 @@ jobs:
           name: bip39-recovery-linux
           path: bip39_recovery.bin
 
-# ------------------- Release 创建 -------------------
+  # ------------------- Release 创建 -------------------
   create-release:
-    needs: [build-windows, build-linux]  # 等待两个构建完成
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
-      # 下载 Windows 构建产物
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: bip39-recovery-windows
           path: ./windows
 
-      # 下载 Linux 构建产物
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
@@ -91,7 +119,6 @@ jobs:
       - name: List downloaded files
         run: ls -lh ./windows ./linux
 
-      # 创建 GitHub Release 并上传两个可执行文件
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
