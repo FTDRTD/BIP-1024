@@ -1,0 +1,26 @@
+# Python virtual environment
+.venv
+venv
+
+# Python cache files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Git repository folder
+.git
+
+# IDE folders
+.idea
+.vscode
+
+# Nuitka/PyInstaller build artifacts (VERY IMPORTANT)
+build/
+dist/
+*.build/
+*.onefile-build/
+
+# Compiled executables
+*.exe
+*.bin
