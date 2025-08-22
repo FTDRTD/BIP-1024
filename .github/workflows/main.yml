@@ -11,7 +11,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
-      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1  # 自动下载 depends.exe
+      NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1  # 自动接受 depends.exe 下载
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,7 +28,13 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt --output-filename=bip39_recovery.exe bip39_recovery.py
+          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter \
+            --include-package-data=ttkbootstrap \
+            --include-data-files=english.txt=./english.txt \
+            --output-filename=bip39_recovery.exe bip39_recovery.py
+
+      - name: List files before upload
+        run: dir
 
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
@@ -36,8 +42,8 @@ jobs:
           name: bip39-recovery-windows
           path: bip39_recovery.exe
 
-  # --- Linux (Tails) 构建 ---
-  build-tails:
+  # --- Linux 构建 ---
+  build-linux:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -49,37 +55,45 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build the builder image
+      - name: Build the Docker image
         run: docker build -t bip39-builder .
 
       - name: Run Nuitka inside Docker
         run: docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka --onefile --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt --output-filename=bip39_recovery.bin bip39_recovery.py
 
+      - name: List files before upload
+        run: ls -lh
+
       - name: Upload Linux executable
         uses: actions/upload-artifact@v4
         with:
-          name: bip39-recovery-tails
+          name: bip39-recovery-linux
           path: bip39_recovery.bin
 
   # --- 创建 Release ---
   create-release:
-    needs: [build-windows, build-tails]
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: bip39-recovery-windows
+          path: ./windows
 
-      - name: Download Tails artifact
+      - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
-          name: bip39-recovery-tails
+          name: bip39-recovery-linux
+          path: ./linux
+
+      - name: List downloaded files
+        run: ls -lh ./windows ./linux
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            bip39-recovery-windows/bip39_recovery.exe
-            bip39-recovery-tails/bip39_recovery.bin
+            windows/bip39_recovery.exe
+            linux/bip39_recovery.bin
