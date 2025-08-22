@@ -16,6 +16,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ---------- 检查文件是否存在 ----------
+      - name: Check if english.txt exists
+        run: |
+          if (Test-Path "english.txt") {
+            Write-Output "english.txt found"
+            Get-Content "english.txt" | Select-Object -First 5
+          } else {
+            Write-Output "english.txt not found"
+            Get-ChildItem -Name
+          }
+        shell: pwsh
+
       # ---------- Windows pip 缓存 ----------
       - name: Cache pip
         uses: actions/cache@v4
@@ -60,7 +72,8 @@ jobs:
         run: |
           nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter `
             --include-package-data=ttkbootstrap `
-            --include-data-files=english.txt=./english.txt `
+            --include-data-file=english.txt=english.txt `
+            --include-data-dir=.=. `
             --output-filename=bip39_recovery.exe bip39_recovery.py 2>&1 | Tee-Object -FilePath nuitka.log
 
       - name: List files before upload
@@ -70,7 +83,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: nuitka-log
+          name: nuitka-log-windows
           path: nuitka.log
 
       - name: Upload Windows executable
@@ -85,6 +98,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ---------- 检查文件是否存在 ----------
+      - name: Check if english.txt exists
+        run: |
+          if [ -f "english.txt" ]; then
+            echo "english.txt found"
+            head -5 english.txt
+          else
+            echo "english.txt not found"
+            ls -la
+          fi
 
       # ---------- Linux pip 缓存 ----------
       - name: Cache pip
@@ -103,7 +127,15 @@ jobs:
         run: docker build -t bip39-builder .
 
       - name: Run Nuitka inside Docker
-        run: docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka --onefile --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt --output-filename=bip39_recovery.bin bip39_recovery.py
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka \
+            --onefile \
+            --enable-plugin=tk-inter \
+            --include-package-data=ttkbootstrap \
+            --include-data-file=english.txt=english.txt \
+            --include-data-dir=.=. \
+            --output-filename=bip39_recovery.bin \
+            bip39_recovery.py
 
       - name: List files before upload
         run: ls -lh
@@ -114,9 +146,63 @@ jobs:
           name: bip39-recovery-linux
           path: bip39_recovery.bin
 
+  # ------------------- macOS 构建 -------------------
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---------- 检查文件是否存在 ----------
+      - name: Check if english.txt exists
+        run: |
+          if [ -f "english.txt" ]; then
+            echo "english.txt found"
+            head -5 english.txt
+          else
+            echo "english.txt not found"
+            ls -la
+          fi
+
+      # ---------- macOS pip 缓存 ----------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt nuitka ttkbootstrap
+
+      - name: Build with Nuitka
+        run: |
+          python -m nuitka --onefile \
+            --enable-plugin=tk-inter \
+            --include-package-data=ttkbootstrap \
+            --include-data-file=english.txt=english.txt \
+            --include-data-dir=.=. \
+            --output-filename=bip39_recovery \
+            bip39_recovery.py
+
+      - name: List files before upload
+        run: ls -lh
+
+      - name: Upload macOS executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: bip39-recovery-macos
+          path: bip39_recovery
+
   # ------------------- Release 创建 -------------------
   create-release:
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -135,8 +221,22 @@ jobs:
           name: bip39-recovery-linux
           path: ./linux
 
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bip39-recovery-macos
+          path: ./macos
+
       - name: List downloaded files
-        run: ls -lh ./windows ./linux
+        run: ls -lh ./windows ./linux ./macos
+
+      # ---------- 重命名文件以便区分平台 ----------
+      - name: Rename files for release
+        run: |
+          mv ./windows/bip39_recovery.exe ./bip39_recovery-windows.exe
+          mv ./linux/bip39_recovery.bin ./bip39_recovery-linux
+          mv ./macos/bip39_recovery ./bip39_recovery-macos
+          chmod +x ./bip39_recovery-linux ./bip39_recovery-macos
 
       # ---------- 生成 Release Tag ----------
       - name: Determine release tag
@@ -162,9 +262,31 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag_name }}
+          name: "Release ${{ steps.tag.outputs.tag_name }}"
+          body: |
+            ## BIP39 Recovery Tool - Cross Platform Release
+
+            This release includes executables for Windows, Linux, and macOS.
+
+            ### Downloads:
+            - **Windows**: `bip39_recovery-windows.exe`
+            - **Linux**: `bip39_recovery-linux`
+            - **macOS**: `bip39_recovery-macos`
+
+            ### Changes:
+            - English wordlist (english.txt) is now embedded in the executable
+            - Cross-platform GUI support with ttkbootstrap
+            - Improved error handling and user experience
+
+            ### Usage:
+            1. Download the appropriate executable for your platform
+            2. Run the executable (no additional files needed)
+            3. Follow the GUI instructions for BIP39 seed recovery
+
           generate_release_notes: true
           files: |
-            windows/bip39_recovery.exe
-            linux/bip39_recovery.bin
+            bip39_recovery-windows.exe
+            bip39_recovery-linux
+            bip39_recovery-macos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
