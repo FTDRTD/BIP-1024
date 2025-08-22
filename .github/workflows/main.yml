@@ -26,13 +26,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12' # 可以根据需要更改 Python 版本
+          python-version: '3.12'
 
-      # 步骤3: 安装依赖 (Nuitka 和 ttkbootstrap)
+      # 步骤3: 安装依赖 (使用 requirements.txt)
+      # 这一步被更新，以使用 requirements.txt 文件，确保依赖版本一致
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install nuitka ttkbootstrap
+          pip install -r requirements.txt
 
       # 步骤4: 运行 Nuitka 打包命令
       - name: Build with Nuitka
@@ -40,7 +41,6 @@ jobs:
           nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt bip39_recovery.py
 
       # 步骤5: 上传构建产物 (artifact)
-      # 这会将 .exe 文件保存起来，以便后续创建 Release 时使用
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
@@ -50,7 +50,7 @@ jobs:
   # --- 任务2: 构建 Tails (Linux) 版本 ---
   build-tails:
     # 指定运行此任务的虚拟机环境
-    runs-on: ubuntu-latest # 使用最新的 Ubuntu 来构建，兼容性好
+    runs-on: ubuntu-latest
 
     # 定义任务的步骤
     steps:
@@ -58,7 +58,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 步骤2: 设置 QEMU 以便 Docker 可以构建多平台镜像 (推荐做法)
+      # 步骤2: 设置 QEMU 以便 Docker 可以构建多平台镜像
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -66,13 +66,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 步骤4: 使用我们之前优化的 Dockerfile 来构建打包镜像
-      # 注意：这里我们不需要登录 Docker Hub
+      # 步骤4: 使用项目中的 Dockerfile 来构建打包镜像
+      # 这个命令现在可以成功执行，因为它能找到你仓库根目录下的 Dockerfile 文件
       - name: Build the builder image
         run: docker build -t bip39-builder .
 
       # 步骤5: 在 Docker 容器中运行 Nuitka 打包
-      # 使用 docker run -v 来挂载代码目录并输出结果
+      # 使用 docker run -v 来挂载当前目录到容器的 /app 目录，并在此容器中执行打包命令
       - name: Run Nuitka inside Docker
         run: |
           docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka --onefile --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt bip39_recovery.py
@@ -86,7 +86,7 @@ jobs:
 
   # --- 任务3: 创建 Release (当 Windows 和 Linux 都构建成功后) ---
   create-release:
-    # 依赖于前两个任务，确保它们都成功完成
+    # 依赖于前两个任务，确保它们都成功完成后再运行
     needs: [build-windows, build-tails]
     # 在 Ubuntu 环境中运行
     runs-on: ubuntu-latest
@@ -106,13 +106,12 @@ jobs:
           name: bip39-recovery-tails
 
       # 步骤3: 创建 GitHub Release 并上传所有文件
-      # 它会自动创建一个基于提交信息的标签
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # 自动生成发布说明
+          # 自动根据 commit 信息生成发布说明
           generate_release_notes: true
-          # 将所有下载的 .exe 和 .bin 文件作为附件上传
+          # 将所有下载的 .exe 和 .bin 文件作为附件上传到 Release
           files: |
             bip39_recovery.exe
             bip39_recovery.bin
