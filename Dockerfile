@@ -21,7 +21,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # 安装 Python 依赖 + Nuitka
-RUN pip install --no-cache-dir -r requirements.txt nuitka
+RUN pip install --no-cache-dir -r requirements.txt nuitka ttkbootstrap
 
 # 复制项目源码
 COPY . .
