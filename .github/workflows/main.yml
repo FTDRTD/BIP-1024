@@ -7,13 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ------------------- Windows 构建 -------------------
   build-windows:
     runs-on: windows-latest
     env:
       NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # ---------- Windows pip 缓存 ----------
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -30,6 +33,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt nuitka ttkbootstrap
 
+      # ---------- Dependency Walker 缓存 ----------
       - name: Cache Dependency Walker
         uses: actions/cache@v4
         with:
@@ -46,24 +50,43 @@ jobs:
           }
         shell: pwsh
 
+      - name: Verify Dependency Walker
+        run: |
+          dir "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+        shell: pwsh
+
       - name: Build with Nuitka
         shell: pwsh
         run: |
           nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter `
             --include-package-data=ttkbootstrap `
-            --include-data-files=english.txt=english.txt `
+            --include-data-files=english.txt=./english.txt `
             --output-filename=bip39_recovery.exe bip39_recovery.py 2>&1 | Tee-Object -FilePath nuitka.log
 
-      - uses: actions/upload-artifact@v4
+      - name: List files before upload
+        run: dir
+
+      - name: Upload Nuitka log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuitka-log
+          path: nuitka.log
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
         with:
           name: bip39-recovery-windows
           path: bip39_recovery.exe
 
+  # ------------------- Linux 构建 -------------------
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # ---------- Linux pip 缓存 ----------
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -76,27 +99,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Build the Docker image
         run: docker build -t bip39-builder .
 
       - name: Run Nuitka inside Docker
-        run: docker run --rm -v ${{ github.workspace }}:/app bip39-builder \
-          python3 -m nuitka --onefile --enable-plugin=tk-inter \
-          --include-package-data=ttkbootstrap \
-          --include-data-files=english.txt=english.txt \
-          --output-filename=bip39_recovery.bin bip39_recovery.py
+        run: docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka --onefile --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt --output-filename=bip39_recovery.bin bip39_recovery.py
 
-      - uses: actions/upload-artifact@v4
+      - name: List files before upload
+        run: ls -lh
+
+      - name: Upload Linux executable
+        uses: actions/upload-artifact@v4
         with:
           name: bip39-recovery-linux
           path: bip39_recovery.bin
 
+  # ------------------- Release 创建 -------------------
   create-release:
     needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # ---------- 下载构建产物 ----------
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -109,13 +135,17 @@ jobs:
           name: bip39-recovery-linux
           path: ./linux
 
+      - name: List downloaded files
+        run: ls -lh ./windows ./linux
+
+      # ---------- 生成 Release Tag ----------
       - name: Determine release tag
         id: tag
         run: |
-          git fetch --tags
           if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* ]]; then
             echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           else
+            git fetch --tags
             latest_tag=$(git tag --sort=-v:refname | grep '^v' | head -n1)
             if [ -z "$latest_tag" ]; then
               new_tag="v1.0.0"
@@ -127,6 +157,7 @@ jobs:
             echo "tag_name=$new_tag" >> $GITHUB_OUTPUT
           fi
 
+      # ---------- 创建 GitHub Release ----------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
