@@ -1,0 +1,118 @@
+# GitHub Actions 工作流名称
+name: Build Cross-Platform Releases
+
+# 触发工作流的事件
+on:
+  # 当有新的推送（push）到 main 分支时触发
+  push:
+    branches: [ "main" ]
+  # 允许手动从 Actions 页面触发
+  workflow_dispatch:
+
+# 定义工作流中的任务 (jobs)
+jobs:
+  # --- 任务1: 构建 Windows 版本 ---
+  build-windows:
+    # 指定运行此任务的虚拟机环境
+    runs-on: windows-latest
+
+    # 定义任务的步骤
+    steps:
+      # 步骤1: 检出（下载）你的代码到虚拟机
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤2: 设置 Python 环境
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' # 可以根据需要更改 Python 版本
+
+      # 步骤3: 安装依赖 (Nuitka 和 ttkbootstrap)
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka ttkbootstrap
+
+      # 步骤4: 运行 Nuitka 打包命令
+      - name: Build with Nuitka
+        run: |
+          nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt bip39_recovery.py
+
+      # 步骤5: 上传构建产物 (artifact)
+      # 这会将 .exe 文件保存起来，以便后续创建 Release 时使用
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: bip39-recovery-windows
+          path: bip39_recovery.exe
+
+  # --- 任务2: 构建 Tails (Linux) 版本 ---
+  build-tails:
+    # 指定运行此任务的虚拟机环境
+    runs-on: ubuntu-latest # 使用最新的 Ubuntu 来构建，兼容性好
+
+    # 定义任务的步骤
+    steps:
+      # 步骤1: 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤2: 设置 QEMU 以便 Docker 可以构建多平台镜像 (推荐做法)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # 步骤3: 设置 Docker Buildx (增强的构建工具)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 步骤4: 使用我们之前优化的 Dockerfile 来构建打包镜像
+      # 注意：这里我们不需要登录 Docker Hub
+      - name: Build the builder image
+        run: docker build -t bip39-builder .
+
+      # 步骤5: 在 Docker 容器中运行 Nuitka 打包
+      # 使用 docker run -v 来挂载代码目录并输出结果
+      - name: Run Nuitka inside Docker
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka --onefile --enable-plugin=tk-inter --include-package-data=ttkbootstrap --include-data-files=english.txt=./english.txt bip39_recovery.py
+
+      # 步骤6: 上传构建产物 (Linux 可执行文件)
+      - name: Upload Linux executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: bip39-recovery-tails
+          path: bip39_recovery.bin
+
+  # --- 任务3: 创建 Release (当 Windows 和 Linux 都构建成功后) ---
+  create-release:
+    # 依赖于前两个任务，确保它们都成功完成
+    needs: [build-windows, build-tails]
+    # 在 Ubuntu 环境中运行
+    runs-on: ubuntu-latest
+
+    # 定义任务的步骤
+    steps:
+      # 步骤1: 下载 Windows 构建产物
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bip39-recovery-windows
+
+      # 步骤2: 下载 Tails/Linux 构建产物
+      - name: Download Tails artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bip39-recovery-tails
+
+      # 步骤3: 创建 GitHub Release 并上传所有文件
+      # 它会自动创建一个基于提交信息的标签
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # 自动生成发布说明
+          generate_release_notes: true
+          # 将所有下载的 .exe 和 .bin 文件作为附件上传
+          files: |
+            bip39_recovery.exe
+            bip39_recovery.bin
