@@ -3,6 +3,13 @@
 [中文版本](README.md) | [English Version](README_EN.md)
 一个用于生成BIP39助记词点图的Python工具，专为物理雕刻和手动恢复场景优化。
 
+## 项目简介
+
+本项目包含两个主要功能：
+
+- **BIP39 DotMap Generator**: 用于生成 BIP39 助记词点图，专为物理雕刻和手动恢复场景优化。
+- **BIP39 Recovery**: 用于通过点图手动恢复 BIP39 助记词。
+
 ## 功能特性
 
 - **点图转换**: 将2048个BIP39英文单词转换为易于识别的点图格式
@@ -33,7 +40,15 @@
 - ReportLab 3.0+
 - 支持UTF-8编码的文本编辑器
 
-## 安装依赖
+## 快速开始
+
+### 环境准备
+
+1.  安装 Python 3.6+
+2.  安装 ReportLab 3.0+
+
+### 安装依赖
+
 
 ```bash
 pip install reportlab
@@ -114,4 +129,13 @@ Error: english.txt has X words (should be 2048).
 ---
 
 [中文版本](README.md) | [English Version](README_EN.md)
-欢迎提交Issue和Pull Request来改进这个项目。
+欢迎提交 Issue 和 Pull Request 来改进这个项目。
+
+如果您有任何问题或建议，请随时提出。
+
+## 离线运行
+
+1. 确保已安装所有依赖。
+2. 在没有网络连接的情况下运行程序，以保证程序无后门，100% 离线运行。
+
+程序将生成 `bip39_dotmap_for_engraving.pdf` 文件。
