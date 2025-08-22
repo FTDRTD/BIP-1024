@@ -3,6 +3,7 @@ from ttkbootstrap.constants import *
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 import os
+import sys
 
 # --- 词典：用于国际化 (i18n) ---
 LANGUAGES = {
@@ -87,6 +88,57 @@ WORDLIST_FILE = "english.txt"
 VALID_INPUT_NUMBERS = {2**i for i in range(11)}
 
 
+def get_resource_path(relative_path):
+    """获取资源文件的绝对路径，兼容打包后的情况"""
+    # 尝试不同的可能路径
+    possible_paths = []
+
+    # 1. Nuitka 打包后的路径
+    if hasattr(sys, "_MEIPASS"):  # PyInstaller
+        possible_paths.append(os.path.join(sys._MEIPASS, relative_path))
+
+    # 2. 可执行文件同目录
+    if hasattr(sys, "executable") and sys.executable:
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        possible_paths.append(os.path.join(exe_dir, relative_path))
+
+    # 3. 脚本文件同目录
+    if hasattr(sys, "argv") and sys.argv:
+        script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        possible_paths.append(os.path.join(script_dir, relative_path))
+
+    # 4. 当前工作目录
+    possible_paths.append(os.path.join(os.getcwd(), relative_path))
+
+    # 5. 模块文件同目录（如果是从模块运行）
+    try:
+        module_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths.append(os.path.join(module_dir, relative_path))
+    except NameError:
+        pass
+
+    # 6. 直接使用相对路径
+    possible_paths.append(relative_path)
+
+    # 尝试每个可能的路径
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"Found resource at: {path}")  # 调试信息
+            return path
+
+    # 如果都找不到，返回None
+    print(f"Resource not found: {relative_path}")  # 调试信息
+    print(f"Tried paths: {possible_paths}")  # 调试信息
+    return None
+
+
+def load_embedded_wordlist():
+    """加载内嵌的英文单词列表，作为fallback"""
+    # 这里可以包含一个硬编码的单词列表作为备选
+    # 为了节省空间，这里只是返回None，让程序尝试文件加载
+    return None
+
+
 class BIP39RecoveryApp:
     def __init__(self, root):
         self.root = root
@@ -123,7 +175,14 @@ class BIP39RecoveryApp:
 
     def load_wordlist(self):
         """从文件加载BIP39词库。"""
-        if not os.path.exists(WORDLIST_FILE):
+        wordlist_path = get_resource_path(WORDLIST_FILE)
+
+        if not wordlist_path:
+            # 尝试使用内嵌的单词列表
+            embedded_wordlist = load_embedded_wordlist()
+            if embedded_wordlist:
+                return embedded_wordlist
+
             Messagebox.show_error(
                 title=LANGUAGES["en"]["wordlist_file_error_title"],
                 message=LANGUAGES["en"]["wordlist_not_found"].format(
@@ -131,8 +190,9 @@ class BIP39RecoveryApp:
                 ),
             )
             return None
+
         try:
-            with open(WORDLIST_FILE, "r", encoding="utf-8") as f:
+            with open(wordlist_path, "r", encoding="utf-8") as f:
                 words = [line.strip() for line in f if line.strip()]
             if len(words) != 2048:
                 Messagebox.show_error(
@@ -142,6 +202,9 @@ class BIP39RecoveryApp:
                     ),
                 )
                 return None
+            print(
+                f"Successfully loaded {len(words)} words from {wordlist_path}"
+            )  # 调试信息
             return words
         except Exception as e:
             Messagebox.show_error(
