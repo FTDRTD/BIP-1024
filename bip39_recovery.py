@@ -1,5 +1,20 @@
+# -*- coding: utf-8 -*-
+"""
+BIP39 Mnemonic Recovery Tool (Offline)
+
+A PySide6-based graphical user interface application that helps users recover
+their BIP39 mnemonic seed phrase in a 100% offline environment. The user
+reconstructs each word by inputting a series of powers of 2 (corresponding
+to the word's index in the BIP39 wordlist), ensuring the full seed phrase
+is never typed or stored in one piece until the final recovery.
+
+The application supports multiple languages (English, Chinese) and seed
+phrase lengths (12, 18, 24 words).
+"""
+
 import os
 import sys
+from typing import List, Optional, Dict, Any, Set
 
 # --- Import PySide6 components ---
 from PySide6.QtWidgets import (
@@ -19,8 +34,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
 
-# --- 词典：用于国际化 (i18n) - Unchanged ---
-LANGUAGES = {
+# --- 词典：用于国际化 (i18n) ---
+LANGUAGES: Dict[str, Dict[str, str]] = {
     "en": {
         "window_title": "Offline BIP39 Mnemonic Recovery Tool",
         "welcome_header": "BIP39 Mnemonic Recovery",
@@ -97,12 +112,12 @@ LANGUAGES = {
     },
 }
 
-# --- 配置和常量 - Unchanged ---
-WORDLIST_FILE = "english.txt"
-VALID_INPUT_NUMBERS = {2**i for i in range(11)}
+# --- 配置和常量 ---
+WORDLIST_FILE: str = "english.txt"
+VALID_INPUT_NUMBERS: Set[int] = {2**i for i in range(11)}  # {1, 2, 4, ..., 1024}
 
 # --- 主题调色板 ---
-Theme = {
+Theme: Dict[str, str] = {
     "BACKGROUND": "#F5F5F5",
     "CONTENT_BACKGROUND": "#FFFFFF",
     "PRIMARY": "#007BFF",
@@ -117,39 +132,60 @@ Theme = {
 }
 
 
-# --- 资源路径函数 - Unchanged ---
-def get_resource_path(relative_path):
-    """获取资源文件的绝对路径，兼容打包后的情况"""
+# --- 资源路径函数 ---
+def get_resource_path(relative_path: str) -> str:
+    """
+    获取资源文件的绝对路径，以兼容PyInstaller/Nuitka打包后的情况。
+
+    Args:
+        relative_path (str): 资源的相对路径。
+
+    Returns:
+        str: 资源的绝对路径。
+    """
     if hasattr(sys, "_MEIPASS"):
+        # 打包后运行
         return os.path.join(sys._MEIPASS, relative_path)
     try:
+        # 正常脚本运行
         base_path = os.path.dirname(os.path.abspath(__file__))
     except NameError:
+        # 在某些IDE的交互式环境中运行
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
 
 class BIP39RecoveryApp(QMainWindow):
-    def __init__(self):
+    """
+    BIP39助记词恢复工具的主应用窗口类。
+    管理UI状态、页面切换和恢复逻辑。
+    """
+
+    def __init__(self) -> None:
+        """初始化应用程序"""
         super().__init__()
-        self.wordlist = self.load_wordlist()
+        self.wordlist: Optional[List[str]] = self.load_wordlist()
         if not self.wordlist:
+            # 如果词库加载失败，则无法继续
             sys.exit(1)
 
-        self.mnemonic_length = 0
-        self.current_word_index = 0
-        self.recovered_words = []
-        self.current_word_sum = 0
-        self.current_word_inputs = []
-        self.current_lang = "zh"
+        # --- 状态变量 ---
+        self.mnemonic_length: int = 0
+        self.current_word_index: int = 0
+        self.recovered_words: List[str] = []
+        self.current_word_sum: int = 0
+        self.current_word_inputs: List[int] = []
+        self.current_lang: str = "zh"
         self.T = lambda key: LANGUAGES[self.current_lang].get(key, key)
 
+        # --- 窗口和UI设置 ---
         self.setFixedSize(700, 650)
         self.setup_styles()
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
+        # --- 页面定义 ---
         self.welcome_widget = QWidget()
         self.recovery_widget = QWidget()
         self.result_widget = QWidget()
@@ -164,19 +200,32 @@ class BIP39RecoveryApp(QMainWindow):
 
         self.update_ui_text()
 
-    def show_message(self, level, title, message):
+    def show_message(self, level: str, title: str, message: str) -> None:
+        """
+        显示一个模式对话框消息。
+
+        Args:
+            level (str): 消息级别 ('error', 'warning', 'info').
+            title (str): 对话框标题。
+            message (str): 要显示的消息内容。
+        """
         box = QMessageBox(self)
         box.setWindowTitle(title)
         box.setText(message)
-        box.setIcon(
-            {
-                "error": QMessageBox.Icon.Critical,
-                "warning": QMessageBox.Icon.Warning,
-            }.get(level, QMessageBox.Icon.Information)
-        )
+        icon = {
+            "error": QMessageBox.Icon.Critical,
+            "warning": QMessageBox.Icon.Warning,
+        }.get(level, QMessageBox.Icon.Information)
+        box.setIcon(icon)
         box.exec()
 
-    def load_wordlist(self):
+    def load_wordlist(self) -> Optional[List[str]]:
+        """
+        从文件中加载BIP39词库。
+
+        Returns:
+            Optional[List[str]]: 如果成功，返回包含2048个单词的列表；否则返回None。
+        """
         wordlist_path = get_resource_path(WORDLIST_FILE)
         if not os.path.exists(wordlist_path):
             self.show_message(
@@ -206,8 +255,8 @@ class BIP39RecoveryApp(QMainWindow):
             )
             return None
 
-    def setup_styles(self):
-        """应用全局样式表 (QSS)"""
+    def setup_styles(self) -> None:
+        """应用全局Qt样式表 (QSS) 来美化UI。"""
         self.setStyleSheet(f"""
             QMainWindow, QWidget {{
                 background-color: {Theme["BACKGROUND"]};
@@ -296,12 +345,20 @@ class BIP39RecoveryApp(QMainWindow):
             }}
         """)
 
-    def create_page_layout(self, parent_widget):
-        """创建标准页面布局：居中的卡片+语言切换器"""
+    def create_page_layout(self, parent_widget: QWidget) -> QVBoxLayout:
+        """
+        创建一个标准的页面布局模板，包含语言切换器和居中的卡片。
+
+        Args:
+            parent_widget (QWidget): 此布局所属的父级控件。
+
+        Returns:
+            QVBoxLayout: 用于在卡片内部添加具体控件的布局。
+        """
         page_layout = QVBoxLayout(parent_widget)
         page_layout.setContentsMargins(0, 10, 0, 10)
 
-        # 语言切换器
+        # --- 语言切换器 ---
         lang_switcher_layout = QHBoxLayout()
         lang_switcher_layout.addStretch()
         lang_switcher_frame = QFrame()
@@ -326,7 +383,7 @@ class BIP39RecoveryApp(QMainWindow):
         lang_switcher_layout.addSpacing(20)
         page_layout.addLayout(lang_switcher_layout)
 
-        # 居中卡片布局
+        # --- 居中卡片布局 ---
         centered_layout = QHBoxLayout()
         centered_layout.addStretch()
         card_frame = QFrame()
@@ -344,7 +401,8 @@ class BIP39RecoveryApp(QMainWindow):
 
         return card_layout
 
-    def create_welcome_page(self):
+    def create_welcome_page(self) -> None:
+        """创建欢迎页面，让用户选择助记词长度。"""
         layout = self.create_page_layout(self.welcome_widget)
 
         self.welcome_header = QLabel()
@@ -377,7 +435,8 @@ class BIP39RecoveryApp(QMainWindow):
         self.offline_warning.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.offline_warning)
 
-    def create_recovery_page(self):
+    def create_recovery_page(self) -> None:
+        """创建单词恢复页面，包含输入、状态显示和已恢复单词列表。"""
         layout = self.create_page_layout(self.recovery_widget)
 
         self.recovery_title_label = QLabel()
@@ -422,7 +481,8 @@ class BIP39RecoveryApp(QMainWindow):
         self.recovered_words_display.setFixedHeight(80)
         layout.addWidget(self.recovered_words_display)
 
-    def create_result_page(self):
+    def create_result_page(self) -> None:
+        """创建最终结果页面，显示完整的助记词。"""
         layout = self.create_page_layout(self.result_widget)
 
         self.result_header = QLabel()
@@ -459,38 +519,53 @@ class BIP39RecoveryApp(QMainWindow):
         self.quit_button.clicked.connect(self.close)
         layout.addWidget(self.quit_button)
 
-    def set_language(self, lang_code):
+    def set_language(self, lang_code: str) -> None:
+        """
+        设置并应用新的界面语言。
+
+        Args:
+            lang_code (str): 语言代码 ('en' 或 'zh')。
+        """
         self.current_lang = lang_code
         self.T = lambda key: LANGUAGES[self.current_lang].get(key, key)
         self.en_button.setProperty("active", lang_code == "en")
         self.zh_button.setProperty("active", lang_code == "zh")
         # 刷新样式以应用active状态
-        self.style().unpolish(self.en_button)
-        self.style().polish(self.en_button)
-        self.style().unpolish(self.zh_button)
-        self.style().polish(self.zh_button)
+        for btn in [self.en_button, self.zh_button]:
+            self.style().unpolish(btn)
+            self.style().polish(btn)
         self.update_ui_text()
 
-    def update_ui_text(self):
+    def update_ui_text(self) -> None:
+        """根据当前语言更新所有界面上的文本。"""
         self.setWindowTitle(self.T("window_title"))
+        # 欢迎页面
         self.welcome_header.setText(self.T("welcome_header"))
         self.select_prompt.setText(self.T("select_length_prompt"))
         self.button12.setText(self.T("12_words"))
         self.button18.setText(self.T("18_words"))
         self.button24.setText(self.T("24_words"))
         self.offline_warning.setText(self.T("offline_warning"))
+        # 恢复页面
         self.enter_num_label.setText(self.T("enter_number_label"))
         self.add_button.setText(self.T("add_number_button"))
         self.next_word_button.setText(self.T("confirm_and_next_button"))
         self.recovered_words_header_label.setText(self.T("recovered_words_header"))
-        self.update_recovery_display()
+        self.update_recovery_display()  # 更新动态文本
+        # 结果页面
         self.result_header.setText(self.T("recovery_complete_header"))
         self.result_prompt.setText(self.T("your_seed_phrase_is"))
         self.security_note.setText(self.T("security_note"))
         self.restart_button.setText(self.T("restart_button"))
         self.quit_button.setText(self.T("quit_button"))
 
-    def start_recovery(self, length):
+    def start_recovery(self, length: int) -> None:
+        """
+        开始一个新的恢复流程。
+
+        Args:
+            length (int): 助记词的长度 (12, 18, or 24)。
+        """
         self.mnemonic_length = length
         self.current_word_index = 0
         self.recovered_words = []
@@ -499,21 +574,21 @@ class BIP39RecoveryApp(QMainWindow):
         self.stacked_widget.setCurrentWidget(self.recovery_widget)
         self.number_entry.setFocus()
 
-    def add_number(self):
+    def add_number(self) -> None:
+        """处理用户输入的数字，并将其添加到当前单词的计算中。"""
         try:
             num_str = self.number_entry.text().strip()
             if not num_str:
                 return
             num = int(num_str)
+
             if num not in VALID_INPUT_NUMBERS:
                 self.show_message(
                     "warning",
                     self.T("invalid_input_title"),
                     self.T("invalid_input_power_of_2_warning"),
                 )
-                self.number_entry.clear()
-                return
-            if num in self.current_word_inputs:
+            elif num in self.current_word_inputs:
                 self.show_message(
                     "warning",
                     self.T("invalid_input_title"),
@@ -522,27 +597,30 @@ class BIP39RecoveryApp(QMainWindow):
             else:
                 self.current_word_inputs.append(num)
                 self.current_word_sum += num
-            self.number_entry.clear()
-            self.update_recovery_display()
+                self.update_recovery_display()
         except ValueError:
             self.show_message(
                 "warning",
                 self.T("invalid_input_title"),
                 self.T("invalid_input_int_warning"),
             )
+        finally:
             self.number_entry.clear()
 
-    def process_next_word(self):
+    def process_next_word(self) -> None:
+        """确认当前单词并进入下一个单词的恢复流程。"""
         if not self.current_word_inputs:
             self.show_message(
                 "warning", self.T("no_input_title"), self.T("no_input_warning")
             )
             return
+
         word_index = self.current_word_sum - 1
-        if 0 <= word_index < 2048:
+        if self.wordlist and 0 <= word_index < len(self.wordlist):
             word = self.wordlist[word_index]
             self.recovered_words.append(word)
             self.current_word_index += 1
+
             if self.current_word_index >= self.mnemonic_length:
                 self.show_final_result()
             else:
@@ -554,25 +632,32 @@ class BIP39RecoveryApp(QMainWindow):
                 "error", self.T("sum_error_title"), self.T("sum_error_message")
             )
 
-    def reset_current_word(self):
+    def reset_current_word(self) -> None:
+        """重置用于计算当前单词的状态变量。"""
         self.current_word_sum = 0
         self.current_word_inputs = []
         if hasattr(self, "number_entry"):
             self.number_entry.clear()
 
-    def update_recovery_display(self):
+    def update_recovery_display(self) -> None:
+        """更新恢复页面上的所有动态文本标签。"""
+        if not hasattr(self, "recovery_title_label"):
+            return  # UI尚未创建
+
         title_text = self.T("recovering_word_title").format(
             current=self.current_word_index + 1, total=self.mnemonic_length
         )
         self.recovery_title_label.setText(title_text)
+
         inputs_str = ", ".join(map(str, sorted(self.current_word_inputs)))
         self.current_inputs_label.setText(
             self.T("entered_numbers_label").format(numbers=inputs_str)
         )
+
         status_text = ""
         if self.current_word_sum > 0:
             word_index = self.current_word_sum - 1
-            if 0 <= word_index < 2048:
+            if self.wordlist and 0 <= word_index < len(self.wordlist):
                 word = self.wordlist[word_index]
                 status_text = self.T("status_valid_word").format(
                     sum=self.current_word_sum, index=word_index + 1, word=word
@@ -586,9 +671,11 @@ class BIP39RecoveryApp(QMainWindow):
         self.current_word_label.setText(
             self.T("current_word_label").format(status=status_text)
         )
+
         self.recovered_words_display.setPlainText(" ".join(self.recovered_words))
 
-    def show_final_result(self):
+    def show_final_result(self) -> None:
+        """显示最终恢复的助记词短语。"""
         final_phrase = " ".join(self.recovered_words)
         self.result_text.setPlainText(final_phrase)
         self.stacked_widget.setCurrentWidget(self.result_widget)
