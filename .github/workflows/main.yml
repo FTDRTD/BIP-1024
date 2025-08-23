@@ -64,8 +64,7 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          python -m nuitka --onefile `
-            --y `
+          python -m nuitka --onefile ` 
             --windows-console-mode=disable `
             --enable-plugin=pyside6 `
             --include-data-file=english.txt=english.txt `
