@@ -63,13 +63,9 @@ jobs:
           python -m pip install --upgrade nuitka
 
       - name: Build with Nuitka
+        shell: cmd
         run: |
-          python -m nuitka --onefile ` 
-            --windows-console-mode=disable `
-            --enable-plugin=pyside6 `
-            --include-data-file=english.txt=english.txt `
-            --output-filename=bip39_recovery-windows.exe `
-            bip39_recovery.py
+          python -m nuitka --onefile --windows-console-mode=disable --enable-plugin=pyside6 --include-data-file=english.txt=english.txt --output-filename=bip39_recovery-windows.exe bip39_recovery.py
         env:
           # 这个环境变量现在是备用，因为我们已经预先下载了工具
           NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1
