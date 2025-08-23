@@ -1,12 +1,41 @@
-import tkinter as tk
-from ttkbootstrap.constants import *
-import ttkbootstrap as ttk
-from ttkbootstrap.dialogs import Messagebox
+# -*- coding: utf-8 -*-
+"""
+BIP39 Mnemonic Recovery Tool (Offline)
+
+A PySide6-based graphical user interface application that helps users recover
+their BIP39 mnemonic seed phrase in a 100% offline environment. The user
+reconstructs each word by inputting a series of powers of 2 (corresponding
+to the word's index in the BIP39 wordlist), ensuring the full seed phrase
+is never typed or stored in one piece until the final recovery.
+
+The application supports multiple languages (English, Chinese) and seed
+phrase lengths (12, 18, 24 words).
+"""
+
 import os
 import sys
+from typing import List, Optional, Dict, Any, Set
+
+# --- Import PySide6 components ---
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QLineEdit,
+    QTextEdit,
+    QStackedWidget,
+    QMessageBox,
+    QFrame,
+)
+from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt
 
 # --- 词典：用于国际化 (i18n) ---
-LANGUAGES = {
+LANGUAGES: Dict[str, Dict[str, str]] = {
     "en": {
         "window_title": "Offline BIP39 Mnemonic Recovery Tool",
         "welcome_header": "BIP39 Mnemonic Recovery",
@@ -84,342 +113,551 @@ LANGUAGES = {
 }
 
 # --- 配置和常量 ---
-WORDLIST_FILE = "english.txt"
-VALID_INPUT_NUMBERS = {2**i for i in range(11)}
+WORDLIST_FILE: str = "english.txt"
+VALID_INPUT_NUMBERS: Set[int] = {2**i for i in range(11)}  # {1, 2, 4, ..., 1024}
+
+# --- 主题调色板 ---
+Theme: Dict[str, str] = {
+    "BACKGROUND": "#F5F5F5",
+    "CONTENT_BACKGROUND": "#FFFFFF",
+    "PRIMARY": "#007BFF",
+    "PRIMARY_HOVER": "#0056b3",
+    "SECONDARY": "#6c757d",
+    "SECONDARY_HOVER": "#545b62",
+    "SUCCESS": "#28a745",
+    "DANGER": "#dc3545",
+    "TEXT": "#333333",
+    "TEXT_SECONDARY": "#666666",
+    "BORDER": "#DEE2E6",
+}
 
 
-def get_resource_path(relative_path):
-    """获取资源文件的绝对路径，兼容打包后的情况"""
-    # 尝试不同的可能路径
-    possible_paths = []
+# --- 资源路径函数 ---
+def get_resource_path(relative_path: str) -> str:
+    """
+    获取资源文件的绝对路径，以兼容PyInstaller/Nuitka打包后的情况。
 
-    # 1. Nuitka 打包后的路径
-    if hasattr(sys, "_MEIPASS"):  # PyInstaller
-        possible_paths.append(os.path.join(sys._MEIPASS, relative_path))
+    Args:
+        relative_path (str): 资源的相对路径。
 
-    # 2. 可执行文件同目录
-    if hasattr(sys, "executable") and sys.executable:
-        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
-        possible_paths.append(os.path.join(exe_dir, relative_path))
-
-    # 3. 脚本文件同目录
-    if hasattr(sys, "argv") and sys.argv:
-        script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-        possible_paths.append(os.path.join(script_dir, relative_path))
-
-    # 4. 当前工作目录
-    possible_paths.append(os.path.join(os.getcwd(), relative_path))
-
-    # 5. 模块文件同目录（如果是从模块运行）
+    Returns:
+        str: 资源的绝对路径。
+    """
+    if hasattr(sys, "_MEIPASS"):
+        # 打包后运行
+        return os.path.join(sys._MEIPASS, relative_path)
     try:
-        module_dir = os.path.dirname(os.path.abspath(__file__))
-        possible_paths.append(os.path.join(module_dir, relative_path))
+        # 正常脚本运行
+        base_path = os.path.dirname(os.path.abspath(__file__))
     except NameError:
-        pass
-
-    # 6. 直接使用相对路径
-    possible_paths.append(relative_path)
-
-    # 尝试每个可能的路径
-    for path in possible_paths:
-        if os.path.exists(path):
-            print(f"Found resource at: {path}")  # 调试信息
-            return path
-
-    # 如果都找不到，返回None
-    print(f"Resource not found: {relative_path}")  # 调试信息
-    print(f"Tried paths: {possible_paths}")  # 调试信息
-    return None
+        # 在某些IDE的交互式环境中运行
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 
-def load_embedded_wordlist():
-    """加载内嵌的英文单词列表，作为fallback"""
-    # 这里可以包含一个硬编码的单词列表作为备选
-    # 为了节省空间，这里只是返回None，让程序尝试文件加载
-    return None
+class BIP39RecoveryApp(QMainWindow):
+    """
+    BIP39助记词恢复工具的主应用窗口类。
+    管理UI状态、页面切换和恢复逻辑。
+    """
 
-
-class BIP39RecoveryApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.geometry("650x600")
-        self.root.resizable(False, False)
-
-        self.style = ttk.Style.get_instance()
-        self.style.configure("Result.TLabel", font=("Courier", 14, "bold"))
-        self.style.configure("Header.TLabel", font=("Helvetica", 18, "bold"))
-
-        self.wordlist = self.load_wordlist()
+    def __init__(self) -> None:
+        """初始化应用程序"""
+        super().__init__()
+        self.wordlist: Optional[List[str]] = self.load_wordlist()
         if not self.wordlist:
-            self.root.destroy()
-            return
+            # 如果词库加载失败，则无法继续
+            sys.exit(1)
 
-        self.mnemonic_length = 0
-        self.current_word_index = 0
-        self.recovered_words = []
-        self.current_word_sum = 0
-        self.current_word_inputs = []
-
-        self.current_lang = "zh"
+        # --- 状态变量 ---
+        self.mnemonic_length: int = 0
+        self.current_word_index: int = 0
+        self.recovered_words: List[str] = []
+        self.current_word_sum: int = 0
+        self.current_word_inputs: List[int] = []
+        self.current_lang: str = "zh"
         self.T = lambda key: LANGUAGES[self.current_lang].get(key, key)
-        self.active_frame_builder = None
 
-        self.create_welcome_frame()
+        # --- 窗口和UI设置 ---
+        self.setFixedSize(700, 650)
+        self.setup_styles()
 
-    def set_language(self, lang_code):
-        """设置显示语言并重绘当前框架。"""
-        self.current_lang = lang_code
-        self.T = lambda key: LANGUAGES[self.current_lang].get(key, key)  # 更新翻译函数
-        if self.active_frame_builder:
-            self.active_frame_builder()
+        self.stacked_widget = QStackedWidget()
+        self.setCentralWidget(self.stacked_widget)
 
-    def load_wordlist(self):
-        """从文件加载BIP39词库。"""
+        # --- 页面定义 ---
+        self.welcome_widget = QWidget()
+        self.recovery_widget = QWidget()
+        self.result_widget = QWidget()
+
+        self.create_welcome_page()
+        self.create_recovery_page()
+        self.create_result_page()
+
+        self.stacked_widget.addWidget(self.welcome_widget)
+        self.stacked_widget.addWidget(self.recovery_widget)
+        self.stacked_widget.addWidget(self.result_widget)
+
+        self.update_ui_text()
+
+    def show_message(self, level: str, title: str, message: str) -> None:
+        """
+        显示一个模式对话框消息。
+
+        Args:
+            level (str): 消息级别 ('error', 'warning', 'info').
+            title (str): 对话框标题。
+            message (str): 要显示的消息内容。
+        """
+        box = QMessageBox(self)
+        box.setWindowTitle(title)
+        box.setText(message)
+        icon = {
+            "error": QMessageBox.Icon.Critical,
+            "warning": QMessageBox.Icon.Warning,
+        }.get(level, QMessageBox.Icon.Information)
+        box.setIcon(icon)
+        box.exec()
+
+    def load_wordlist(self) -> Optional[List[str]]:
+        """
+        从文件中加载BIP39词库。
+
+        Returns:
+            Optional[List[str]]: 如果成功，返回包含2048个单词的列表；否则返回None。
+        """
         wordlist_path = get_resource_path(WORDLIST_FILE)
-
-        if not wordlist_path:
-            # 尝试使用内嵌的单词列表
-            embedded_wordlist = load_embedded_wordlist()
-            if embedded_wordlist:
-                return embedded_wordlist
-
-            Messagebox.show_error(
-                title=LANGUAGES["en"]["wordlist_file_error_title"],
-                message=LANGUAGES["en"]["wordlist_not_found"].format(
-                    filename=WORDLIST_FILE
-                ),
+        if not os.path.exists(wordlist_path):
+            self.show_message(
+                "error",
+                LANGUAGES["en"]["wordlist_file_error_title"],
+                LANGUAGES["en"]["wordlist_not_found"].format(filename=WORDLIST_FILE),
             )
             return None
-
         try:
             with open(wordlist_path, "r", encoding="utf-8") as f:
                 words = [line.strip() for line in f if line.strip()]
             if len(words) != 2048:
-                Messagebox.show_error(
-                    title=LANGUAGES["en"]["wordlist_file_error_title"],
-                    message=LANGUAGES["en"]["wordlist_invalid_length"].format(
+                self.show_message(
+                    "error",
+                    LANGUAGES["en"]["wordlist_file_error_title"],
+                    LANGUAGES["en"]["wordlist_invalid_length"].format(
                         filename=WORDLIST_FILE, count=len(words)
                     ),
                 )
                 return None
-            print(
-                f"Successfully loaded {len(words)} words from {wordlist_path}"
-            )  # 调试信息
             return words
         except Exception as e:
-            Messagebox.show_error(
-                title=LANGUAGES["en"]["file_read_error_title"],
-                message=LANGUAGES["en"]["file_read_error_message"].format(error=e),
+            self.show_message(
+                "error",
+                LANGUAGES["en"]["file_read_error_title"],
+                LANGUAGES["en"]["file_read_error_message"].format(error=e),
             )
             return None
 
-    def clear_frame(self):
-        """从主窗口移除所有部件。"""
-        for widget in self.root.winfo_children():
-            widget.destroy()
+    def setup_styles(self) -> None:
+        """应用全局Qt样式表 (QSS) 来美化UI。"""
+        self.setStyleSheet(f"""
+            QMainWindow, QWidget {{
+                background-color: {Theme["BACKGROUND"]};
+                font-family: 'Segoe UI', 'Microsoft YaHei', 'Helvetica';
+                font-size: 14px;
+            }}
+            QFrame#Card {{
+                background-color: {Theme["CONTENT_BACKGROUND"]};
+                border-radius: 8px;
+                border: 1px solid {Theme["BORDER"]};
+            }}
+            QLabel {{
+                color: {Theme["TEXT"]};
+            }}
+            QLabel#HeaderLabel {{
+                font-size: 26px;
+                font-weight: 600;
+                color: {Theme["TEXT"]};
+            }}
+            QLabel#PromptLabel {{
+                color: {Theme["TEXT_SECONDARY"]};
+            }}
+            QLabel#ResultLabel {{
+                font-family: 'Courier New', 'monospace';
+                font-size: 18px;
+                font-weight: bold;
+                color: {Theme["SUCCESS"]};
+            }}
+            QLabel#ErrorLabel {{
+                color: {Theme["DANGER"]};
+                font-weight: 500;
+            }}
+            QPushButton {{
+                min-height: 40px;
+                font-size: 15px;
+                font-weight: 500;
+                border-radius: 6px;
+                border: 1px solid {Theme["BORDER"]};
+                background-color: {Theme["CONTENT_BACKGROUND"]};
+            }}
+            QPushButton:hover {{
+                background-color: #f8f9fa;
+            }}
+            QPushButton#PrimaryButton {{
+                background-color: {Theme["PRIMARY"]};
+                color: white;
+                border: none;
+            }}
+            QPushButton#PrimaryButton:hover {{
+                background-color: {Theme["PRIMARY_HOVER"]};
+            }}
+            QPushButton#QuitButton {{
+                background-color: {Theme["SECONDARY"]};
+                color: white;
+                border: none;
+            }}
+            QPushButton#QuitButton:hover {{
+                background-color: {Theme["SECONDARY_HOVER"]};
+            }}
+            QLineEdit, QTextEdit {{
+                border: 1px solid {Theme["BORDER"]};
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 14px;
+                background-color: #FFFFFF;
+            }}
+            QLineEdit:focus, QTextEdit:focus {{
+                border-color: {Theme["PRIMARY"]};
+            }}
+            QTextEdit {{
+                font-family: 'Courier New', monospace;
+            }}
+            QFrame#LangSwitcher {{
+                border: 1px solid {Theme["BORDER"]};
+                border-radius: 6px;
+            }}
+            QPushButton#LangButton {{
+                border: none;
+                min-height: 28px;
+                font-size: 13px;
+                padding: 5px 15px;
+            }}
+            QPushButton#LangButton[active="true"] {{
+                background-color: {Theme["PRIMARY"]};
+                color: white;
+            }}
+        """)
 
-    def start_recovery(self, length):
-        """为指定长度开始恢复过程。"""
+    def create_page_layout(self, parent_widget: QWidget) -> QVBoxLayout:
+        """
+        创建一个标准的页面布局模板，包含语言切换器和居中的卡片。
+
+        Args:
+            parent_widget (QWidget): 此布局所属的父级控件。
+
+        Returns:
+            QVBoxLayout: 用于在卡片内部添加具体控件的布局。
+        """
+        page_layout = QVBoxLayout(parent_widget)
+        page_layout.setContentsMargins(0, 10, 0, 10)
+
+        # --- 语言切换器 ---
+        lang_switcher_layout = QHBoxLayout()
+        lang_switcher_layout.addStretch()
+        lang_switcher_frame = QFrame()
+        lang_switcher_frame.setObjectName("LangSwitcher")
+        lang_switcher_hbox = QHBoxLayout(lang_switcher_frame)
+        lang_switcher_hbox.setContentsMargins(0, 0, 0, 0)
+        lang_switcher_hbox.setSpacing(0)
+
+        self.en_button = QPushButton("English")
+        self.en_button.setObjectName("LangButton")
+        self.en_button.setProperty("active", self.current_lang == "en")
+        self.en_button.clicked.connect(lambda: self.set_language("en"))
+        lang_switcher_hbox.addWidget(self.en_button)
+
+        self.zh_button = QPushButton("中文")
+        self.zh_button.setObjectName("LangButton")
+        self.zh_button.setProperty("active", self.current_lang == "zh")
+        self.zh_button.clicked.connect(lambda: self.set_language("zh"))
+        lang_switcher_hbox.addWidget(self.zh_button)
+
+        lang_switcher_layout.addWidget(lang_switcher_frame)
+        lang_switcher_layout.addSpacing(20)
+        page_layout.addLayout(lang_switcher_layout)
+
+        # --- 居中卡片布局 ---
+        centered_layout = QHBoxLayout()
+        centered_layout.addStretch()
+        card_frame = QFrame()
+        card_frame.setObjectName("Card")
+        card_frame.setFixedWidth(550)
+        card_layout = QVBoxLayout(card_frame)
+        card_layout.setContentsMargins(40, 40, 40, 40)
+        card_layout.setSpacing(20)
+        centered_layout.addWidget(card_frame)
+        centered_layout.addStretch()
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(centered_layout)
+        page_layout.addStretch(2)
+
+        return card_layout
+
+    def create_welcome_page(self) -> None:
+        """创建欢迎页面，让用户选择助记词长度。"""
+        layout = self.create_page_layout(self.welcome_widget)
+
+        self.welcome_header = QLabel()
+        self.welcome_header.setObjectName("HeaderLabel")
+        self.welcome_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.welcome_header)
+
+        self.select_prompt = QLabel()
+        self.select_prompt.setObjectName("PromptLabel")
+        self.select_prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.select_prompt)
+        layout.addSpacing(20)
+
+        self.button12 = QPushButton()
+        self.button12.clicked.connect(lambda: self.start_recovery(12))
+        layout.addWidget(self.button12)
+
+        self.button18 = QPushButton()
+        self.button18.clicked.connect(lambda: self.start_recovery(18))
+        layout.addWidget(self.button18)
+
+        self.button24 = QPushButton()
+        self.button24.clicked.connect(lambda: self.start_recovery(24))
+        layout.addWidget(self.button24)
+
+        layout.addStretch()
+
+        self.offline_warning = QLabel()
+        self.offline_warning.setObjectName("PromptLabel")
+        self.offline_warning.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.offline_warning)
+
+    def create_recovery_page(self) -> None:
+        """创建单词恢复页面，包含输入、状态显示和已恢复单词列表。"""
+        layout = self.create_page_layout(self.recovery_widget)
+
+        self.recovery_title_label = QLabel()
+        self.recovery_title_label.setObjectName("HeaderLabel")
+        layout.addWidget(self.recovery_title_label)
+
+        input_layout = QHBoxLayout()
+        self.enter_num_label = QLabel()
+        input_layout.addWidget(self.enter_num_label)
+        self.number_entry = QLineEdit()
+        self.number_entry.setFixedWidth(120)
+        self.number_entry.returnPressed.connect(self.add_number)
+        input_layout.addWidget(self.number_entry)
+        self.add_button = QPushButton()
+        self.add_button.setObjectName("PrimaryButton")
+        self.add_button.clicked.connect(self.add_number)
+        input_layout.addWidget(self.add_button)
+        input_layout.addStretch()
+        layout.addLayout(input_layout)
+
+        self.current_inputs_label = QLabel()
+        self.current_inputs_label.setWordWrap(True)
+        layout.addWidget(self.current_inputs_label)
+
+        self.current_word_label = QLabel()
+        self.current_word_label.setObjectName("ResultLabel")
+        layout.addWidget(self.current_word_label)
+
+        self.next_word_button = QPushButton()
+        self.next_word_button.setObjectName("PrimaryButton")
+        self.next_word_button.clicked.connect(self.process_next_word)
+        layout.addWidget(self.next_word_button)
+
+        layout.addSpacing(15)
+
+        self.recovered_words_header_label = QLabel()
+        self.recovered_words_header_label.setObjectName("PromptLabel")
+        layout.addWidget(self.recovered_words_header_label)
+
+        self.recovered_words_display = QTextEdit()
+        self.recovered_words_display.setReadOnly(True)
+        self.recovered_words_display.setFixedHeight(80)
+        layout.addWidget(self.recovered_words_display)
+
+    def create_result_page(self) -> None:
+        """创建最终结果页面，显示完整的助记词。"""
+        layout = self.create_page_layout(self.result_widget)
+
+        self.result_header = QLabel()
+        self.result_header.setObjectName("HeaderLabel")
+        self.result_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.result_header)
+
+        self.result_prompt = QLabel()
+        self.result_prompt.setObjectName("PromptLabel")
+        self.result_prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.result_prompt)
+
+        self.result_text = QTextEdit()
+        self.result_text.setReadOnly(True)
+        self.result_text.setFixedHeight(120)
+        layout.addWidget(self.result_text)
+
+        self.security_note = QLabel()
+        self.security_note.setObjectName("ErrorLabel")
+        self.security_note.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.security_note)
+
+        layout.addSpacing(20)
+
+        self.restart_button = QPushButton()
+        self.restart_button.setObjectName("PrimaryButton")
+        self.restart_button.clicked.connect(
+            lambda: self.stacked_widget.setCurrentWidget(self.welcome_widget)
+        )
+        layout.addWidget(self.restart_button)
+
+        self.quit_button = QPushButton()
+        self.quit_button.setObjectName("QuitButton")
+        self.quit_button.clicked.connect(self.close)
+        layout.addWidget(self.quit_button)
+
+    def set_language(self, lang_code: str) -> None:
+        """
+        设置并应用新的界面语言。
+
+        Args:
+            lang_code (str): 语言代码 ('en' 或 'zh')。
+        """
+        self.current_lang = lang_code
+        self.T = lambda key: LANGUAGES[self.current_lang].get(key, key)
+        self.en_button.setProperty("active", lang_code == "en")
+        self.zh_button.setProperty("active", lang_code == "zh")
+        # 刷新样式以应用active状态
+        for btn in [self.en_button, self.zh_button]:
+            self.style().unpolish(btn)
+            self.style().polish(btn)
+        self.update_ui_text()
+
+    def update_ui_text(self) -> None:
+        """根据当前语言更新所有界面上的文本。"""
+        self.setWindowTitle(self.T("window_title"))
+        # 欢迎页面
+        self.welcome_header.setText(self.T("welcome_header"))
+        self.select_prompt.setText(self.T("select_length_prompt"))
+        self.button12.setText(self.T("12_words"))
+        self.button18.setText(self.T("18_words"))
+        self.button24.setText(self.T("24_words"))
+        self.offline_warning.setText(self.T("offline_warning"))
+        # 恢复页面
+        self.enter_num_label.setText(self.T("enter_number_label"))
+        self.add_button.setText(self.T("add_number_button"))
+        self.next_word_button.setText(self.T("confirm_and_next_button"))
+        self.recovered_words_header_label.setText(self.T("recovered_words_header"))
+        self.update_recovery_display()  # 更新动态文本
+        # 结果页面
+        self.result_header.setText(self.T("recovery_complete_header"))
+        self.result_prompt.setText(self.T("your_seed_phrase_is"))
+        self.security_note.setText(self.T("security_note"))
+        self.restart_button.setText(self.T("restart_button"))
+        self.quit_button.setText(self.T("quit_button"))
+
+    def start_recovery(self, length: int) -> None:
+        """
+        开始一个新的恢复流程。
+
+        Args:
+            length (int): 助记词的长度 (12, 18, or 24)。
+        """
         self.mnemonic_length = length
         self.current_word_index = 0
         self.recovered_words = []
         self.reset_current_word()
-        self.create_recovery_frame()
+        self.update_recovery_display()
+        self.stacked_widget.setCurrentWidget(self.recovery_widget)
+        self.number_entry.setFocus()
 
-    def add_number(self):
-        """处理输入的数字。"""
+    def add_number(self) -> None:
+        """处理用户输入的数字，并将其添加到当前单词的计算中。"""
         try:
-            num_str = self.number_entry.get().strip()
+            num_str = self.number_entry.text().strip()
             if not num_str:
                 return
             num = int(num_str)
+
             if num not in VALID_INPUT_NUMBERS:
-                Messagebox.show_warning(
+                self.show_message(
+                    "warning",
+                    self.T("invalid_input_title"),
                     self.T("invalid_input_power_of_2_warning"),
-                    self.T("invalid_input_title"),
                 )
-                self.number_entry.delete(0, tk.END)
-                return
-            if num in self.current_word_inputs:
-                Messagebox.show_warning(
-                    self.T("duplicate_input_warning").format(num=num),
+            elif num in self.current_word_inputs:
+                self.show_message(
+                    "warning",
                     self.T("invalid_input_title"),
+                    self.T("duplicate_input_warning").format(num=num),
                 )
             else:
                 self.current_word_inputs.append(num)
                 self.current_word_sum += num
-            self.number_entry.delete(0, tk.END)
-            self.update_recovery_display()
+                self.update_recovery_display()
         except ValueError:
-            Messagebox.show_warning(
-                self.T("invalid_input_int_warning"), self.T("invalid_input_title")
+            self.show_message(
+                "warning",
+                self.T("invalid_input_title"),
+                self.T("invalid_input_int_warning"),
             )
-            self.number_entry.delete(0, tk.END)
+        finally:
+            self.number_entry.clear()
 
-    def process_next_word(self):
-        """确认当前单词并处理下一个。"""
-        if self.current_word_sum == 0:
-            Messagebox.show_warning(
-                self.T("no_input_warning"), self.T("no_input_title")
+    def process_next_word(self) -> None:
+        """确认当前单词并进入下一个单词的恢复流程。"""
+        if not self.current_word_inputs:
+            self.show_message(
+                "warning", self.T("no_input_title"), self.T("no_input_warning")
             )
             return
+
         word_index = self.current_word_sum - 1
-        if 0 <= word_index < 2048:
+        if self.wordlist and 0 <= word_index < len(self.wordlist):
             word = self.wordlist[word_index]
             self.recovered_words.append(word)
             self.current_word_index += 1
+
             if self.current_word_index >= self.mnemonic_length:
                 self.show_final_result()
             else:
                 self.reset_current_word()
                 self.update_recovery_display()
+                self.number_entry.setFocus()
         else:
-            Messagebox.show_error(
-                self.T("sum_error_message"), self.T("sum_error_title")
+            self.show_message(
+                "error", self.T("sum_error_title"), self.T("sum_error_message")
             )
 
-    def reset_current_word(self):
-        """重置状态以输入下一个单词。"""
+    def reset_current_word(self) -> None:
+        """重置用于计算当前单词的状态变量。"""
         self.current_word_sum = 0
         self.current_word_inputs = []
+        if hasattr(self, "number_entry"):
+            self.number_entry.clear()
 
-    def create_language_switcher(self, parent_frame):
-        """创建语言切换按钮。"""
-        lang_frame = ttk.Frame(parent_frame)
-        lang_frame.pack(anchor="ne", padx=10, pady=5)
+    def update_recovery_display(self) -> None:
+        """更新恢复页面上的所有动态文本标签。"""
+        if not hasattr(self, "recovery_title_label"):
+            return  # UI尚未创建
 
-        en_button = ttk.Button(
-            lang_frame,
-            text="English",
-            bootstyle="outline-secondary",
-            command=lambda: self.set_language("en"),
-        )
-        en_button.pack(side="left", padx=5)
-
-        zh_button = ttk.Button(
-            lang_frame,
-            text="中文",
-            bootstyle="outline-secondary",
-            command=lambda: self.set_language("zh"),
-        )
-        zh_button.pack(side="left")
-
-    def create_welcome_frame(self):
-        """显示初始的助记词长度选择屏幕。"""
-        self.active_frame_builder = self.create_welcome_frame
-        self.clear_frame()
-        self.root.title(self.T("window_title"))
-
-        self.create_language_switcher(self.root)
-        frame = ttk.Frame(self.root, padding="40 20")
-        frame.pack(expand=True, fill="both")
-
-        ttk.Label(frame, text=self.T("welcome_header"), style="Header.TLabel").pack(
-            pady=(0, 30)
-        )
-        ttk.Label(frame, text=self.T("select_length_prompt"), wraplength=500).pack(
-            pady=10
-        )
-
-        ttk.Button(
-            frame,
-            text=self.T("12_words"),
-            bootstyle="primary-outline",
-            command=lambda: self.start_recovery(12),
-        ).pack(pady=10, fill="x", ipady=5)
-        ttk.Button(
-            frame,
-            text=self.T("18_words"),
-            bootstyle="primary-outline",
-            command=lambda: self.start_recovery(18),
-        ).pack(pady=10, fill="x", ipady=5)
-        ttk.Button(
-            frame,
-            text=self.T("24_words"),
-            bootstyle="primary-outline",
-            command=lambda: self.start_recovery(24),
-        ).pack(pady=10, fill="x", ipady=5)
-
-        ttk.Label(frame, text=self.T("offline_warning"), bootstyle="secondary").pack(
-            side=BOTTOM, pady=20
-        )
-
-    def create_recovery_frame(self):
-        """创建用于输入数字的主GUI。"""
-        self.active_frame_builder = self.create_recovery_frame
-        self.clear_frame()
-        self.root.title(self.T("window_title"))
-        self.create_language_switcher(self.root)
-
-        frame = ttk.Frame(self.root, padding="40 20")
-        frame.pack(expand=True, fill="both")
-
-        self.title_label = ttk.Label(frame, text="", style="Header.TLabel")
-        self.title_label.pack(pady=(0, 20))
-
-        input_frame = ttk.Frame(frame)
-        input_frame.pack(fill="x", pady=10)
-        self.enter_num_label = ttk.Label(input_frame, text="")
-        self.enter_num_label.pack(side="left", padx=(0, 10))
-        self.number_entry = ttk.Entry(input_frame, font=("Helvetica", 12), width=10)
-        self.number_entry.pack(side="left", fill="x", expand=True)
-        self.add_button = ttk.Button(
-            input_frame, text="", command=self.add_number, bootstyle="success"
-        )
-        self.add_button.pack(side="left", padx=(10, 0))
-        self.root.bind("<Return>", lambda event: self.add_number())
-
-        self.current_inputs_label = ttk.Label(frame, text="", wraplength=550)
-        self.current_inputs_label.pack(anchor="w", pady=10)
-        self.current_word_label = ttk.Label(frame, text="", style="Result.TLabel")
-        self.current_word_label.pack(anchor="w", pady=10)
-
-        self.next_word_button = ttk.Button(
-            frame, text="", command=self.process_next_word, bootstyle="primary"
-        )
-        self.next_word_button.pack(pady=20, fill="x", ipady=5)
-
-        self.recovered_words_header_label = ttk.Label(frame, text="")
-        self.recovered_words_header_label.pack(anchor="w", pady=(20, 5))
-        self.recovered_words_display = tk.Text(
-            frame,
-            height=5,
-            width=60,
-            font=("Courier", 11),
-            wrap="word",
-            relief="solid",
-            borderwidth=1,
-        )
-        self.recovered_words_display.pack(fill="x")
-        self.recovered_words_display.config(state="disabled")
-
-        self.update_ui_texts()
-        self.update_recovery_display()
-        self.number_entry.focus()
-
-    def update_ui_texts(self):
-        """更新恢复视图中的所有静态文本。"""
-        self.enter_num_label.config(text=self.T("enter_number_label"))
-        self.add_button.config(text=self.T("add_number_button"))
-        self.next_word_button.config(text=self.T("confirm_and_next_button"))
-        self.recovered_words_header_label.config(text=self.T("recovered_words_header"))
-
-    def update_recovery_display(self):
-        """更新GUI中所有动态标签和显示。"""
         title_text = self.T("recovering_word_title").format(
             current=self.current_word_index + 1, total=self.mnemonic_length
         )
-        self.title_label.config(text=title_text)
+        self.recovery_title_label.setText(title_text)
 
         inputs_str = ", ".join(map(str, sorted(self.current_word_inputs)))
-        self.current_inputs_label.config(
-            text=self.T("entered_numbers_label").format(numbers=inputs_str)
+        self.current_inputs_label.setText(
+            self.T("entered_numbers_label").format(numbers=inputs_str)
         )
 
         status_text = ""
         if self.current_word_sum > 0:
             word_index = self.current_word_sum - 1
-            if 0 <= word_index < 2048:
+            if self.wordlist and 0 <= word_index < len(self.wordlist):
                 word = self.wordlist[word_index]
                 status_text = self.T("status_valid_word").format(
                     sum=self.current_word_sum, index=word_index + 1, word=word
@@ -430,63 +668,21 @@ class BIP39RecoveryApp:
                 )
         else:
             status_text = self.T("status_waiting")
-        self.current_word_label.config(
-            text=self.T("current_word_label").format(status=status_text)
+        self.current_word_label.setText(
+            self.T("current_word_label").format(status=status_text)
         )
 
-        self.recovered_words_display.config(state="normal")
-        self.recovered_words_display.delete("1.0", tk.END)
-        self.recovered_words_display.insert("1.0", " ".join(self.recovered_words))
-        self.recovered_words_display.config(state="disabled")
+        self.recovered_words_display.setPlainText(" ".join(self.recovered_words))
 
-    def show_final_result(self):
-        """显示最终恢复的短语。"""
-        self.active_frame_builder = self.show_final_result
-        self.clear_frame()
-        self.root.title(self.T("window_title"))
-        self.create_language_switcher(self.root)
-
-        frame = ttk.Frame(self.root, padding="40 20")
-        frame.pack(expand=True, fill="both")
-
-        ttk.Label(
-            frame, text=self.T("recovery_complete_header"), style="Header.TLabel"
-        ).pack(pady=20)
-        ttk.Label(frame, text=self.T("your_seed_phrase_is")).pack(pady=10)
-
-        result_text = tk.Text(
-            frame,
-            height=6,
-            width=60,
-            font=("Courier", 12),
-            wrap="word",
-            relief="solid",
-            borderwidth=1,
-        )
-        result_text.insert("1.0", " ".join(self.recovered_words))
-        result_text.config(state="disabled")
-        result_text.pack(pady=10)
-
-        ttk.Label(frame, text=self.T("security_note"), bootstyle="danger").pack(pady=20)
-
-        ttk.Button(
-            frame,
-            text=self.T("restart_button"),
-            command=self.create_welcome_frame,
-            bootstyle="info",
-        ).pack(pady=10, fill="x", ipady=5)
-        ttk.Button(
-            frame,
-            text=self.T("quit_button"),
-            command=self.root.quit,
-            bootstyle="secondary",
-        ).pack(pady=5, fill="x", ipady=5)
+    def show_final_result(self) -> None:
+        """显示最终恢复的助记词短语。"""
+        final_phrase = " ".join(self.recovered_words)
+        self.result_text.setPlainText(final_phrase)
+        self.stacked_widget.setCurrentWidget(self.result_widget)
 
 
 if __name__ == "__main__":
-    # 使用 ttkbootstrap.Window 创建带主题的窗口
-    # 可用亮色主题: litera, cosmo, flatly, journal, lumen, minty, pulse, sandstone, united, yeti
-    # 可用暗色主题: darkly, superhero, solar, cyborg
-    root = ttk.Window(themename="litera")
-    app = BIP39RecoveryApp(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    window = BIP39RecoveryApp()
+    window.show()
+    sys.exit(app.exec())
