@@ -35,13 +35,14 @@ jobs:
       - name: Build with Nuitka
         run: |
           python -m nuitka --onefile `
-            --windows-disable-console `
+            --yes `
+            --windows-console-mode=disable `
             --enable-plugin=pyside6 `
             --include-data-file=english.txt=english.txt `
             --output-filename=bip39_recovery-windows.exe `
             bip39_recovery.py
         env:
-          # 允许 Nuitka 在需要时自动下载依赖工具 (如 depends.exe)
+          # 这个环境变量可以保留，但 --yes 参数更具决定性
           NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1
 
       - name: Upload Windows executable
@@ -63,10 +64,12 @@ jobs:
       - name: Build the Docker image for our builder
         run: docker build -t bip39-builder .
 
-      - name: Run Nuitka inside Docker
-        # 在 bash shell 中，行继续符是反斜杠 (\)
+      - name: Run Nuitka inside Docker as current user
+        # 核心修改：添加 --user $(id -u):$(id -g)
+        # 这会以当前宿主机用户（runner）的身份在容器内执行命令
+        # 从而保证创建的文件的所有权是正确的
         run: |
-          docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka \
+          docker run --rm --user $(id -u):$(id -g) -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka \
             --onefile \
             --enable-plugin=pyside6 \
             --include-data-file=english.txt=english.txt \
@@ -74,6 +77,7 @@ jobs:
             bip39_recovery.py
 
       - name: Set executable permissions
+        # 现在，因为文件的所有者是 runner，这个命令将能成功执行
         run: chmod +x bip39_recovery-linux
 
       - name: Upload Linux executable
