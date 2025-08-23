@@ -1,26 +1,36 @@
-# 步骤 1: 使用一个稳定且轻量的 Python 官方镜像
+# 使用一个稳定且轻量的 Python 官方镜像
 FROM python:3.12-slim
 
-# 步骤 2: 安装 PySide6 (Qt6) 运行所需的系统级依赖
-# 这包括 C++ 编译器、OpenGL 库、XCB (X11) 相关库等
-# patchelf 是 Nuitka 在 Linux 下经常使用的一个工具，用于修改可执行文件的依赖路径
+# 安装 Nuitka 和 PySide6 (Qt6) 运行所需的系统级依赖
+# 这是一个更全面的列表，可以避免未来出现类似的依赖缺失问题
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     patchelf \
-    libgl1 \
+    # 修复您日志中直接报错的库 (GLib)
+    libglib2.0-0 \
+    # OpenGL 相关的库
+    libgl1-mesa-glx \
+    # X11/XCB 窗口系统相关的核心库
+    libx11-xcb1 \
+    libxcb-xinerama0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-render-util0 \
     libxcb-cursor0 \
+    # 字体和字体配置相关的库
+    libfontconfig1 \
+    libfreetype6 \
+    # D-Bus 消息总线系统
+    libdbus-1-3 \
     && rm -rf /var/lib/apt/lists/*
 
-# 步骤 3: 在容器内设置一个工作目录
+# 在容器内设置一个工作目录
 WORKDIR /app
 
-# 步骤 4: 仅复制依赖描述文件，并安装 Python 包
-# 这样做可以充分利用 Docker 的层缓存机制。只要 requirements.txt 不变，
-# 这一层就不需要重新构建，可以加快后续的构建速度。
+# 复制依赖描述文件，并安装 Python 包以利用 Docker 缓存
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt nuitka
 
-# 注意：我们在这里没有使用 `COPY . .`
-# 因为在 GitHub Actions 工作流中，我们会通过挂载卷的方式，
-# 将最新的代码动态地映射到容器的 /app 目录中进行编译。
-# 这样做更灵活，也让这个 Docker 镜像可以被重复用于不同版本的代码编译。
+# GitHub Actions 将会通过 volume 挂载源代码到 /app 目录
+# 所以这里不需要 `COPY . .`

@@ -34,11 +34,11 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          python -m nuitka --onefile ^
-            --windows-disable-console ^
-            --enable-plugin=pyside6 ^
-            --include-data-file=english.txt=english.txt ^
-            --output-filename=bip39_recovery-windows.exe ^
+          python -m nuitka --onefile `
+            --windows-disable-console `
+            --enable-plugin=pyside6 `
+            --include-data-file=english.txt=english.txt `
+            --output-filename=bip39_recovery-windows.exe `
             bip39_recovery.py
         env:
           # 允许 Nuitka 在需要时自动下载依赖工具 (如 depends.exe)
@@ -61,11 +61,10 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build the Docker image for our builder
-        # 此步骤会使用您仓库根目录下的 Dockerfile
         run: docker build -t bip39-builder .
 
       - name: Run Nuitka inside Docker
-        # 将当前代码目录挂载到容器的 /app 目录并执行打包命令
+        # 在 bash shell 中，行继续符是反斜杠 (\)
         run: |
           docker run --rm -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka \
             --onefile \
@@ -109,6 +108,7 @@ jobs:
           pip install -r requirements.txt nuitka
 
       - name: Build with Nuitka
+        # 在 bash shell 中，行继续符是反斜杠 (\)
         run: |
           python -m nuitka --onefile \
             --macos-create-app-bundle \
@@ -118,7 +118,6 @@ jobs:
             bip39_recovery.py
 
       - name: Create Zip of .app bundle
-        # 在 macOS 上，推荐使用 ditto 命令来压缩 .app 包，以保留所有元数据和权限
         run: ditto -c -k --sequesterRsrc --keepParent bip39_recovery.app bip39_recovery-macos.zip
 
       - name: Upload macOS executable zip
@@ -129,41 +128,27 @@ jobs:
 
   # ------------------- 创建 GitHub Release -------------------
   create-release:
-    # 此任务仅在所有构建任务都成功，并且触发事件是推送 tag 时才运行
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 必须有这个权限才能创建 Release
+      contents: write
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/ # 将所有构建产物下载到 artifacts 目录
-
-      - name: List downloaded files
-        run: ls -R artifacts
+          path: artifacts/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # 使用触发工作流的 tag 名称作为 Release 的 tag
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ github.ref_name }}"
           body: |
             ## BIP39 恢复工具 - 跨平台发布版
-
             本次发布包含了 Windows、Linux 和 macOS 的可执行文件。
             `english.txt` 词库文件已内嵌到每个应用中，无需额外文件。
-
-            ### 使用方法
-            1.  根据您的操作系统下载对应的文件。
-            2.  在 macOS 上，请先解压 zip 文件得到 `.app` 应用。
-            3.  直接运行即可，无需安装。
-
-          # 自动根据 commit 历史生成发布说明
           generate_release_notes: true
-          # 将所有平台的构建产物作为附件上传到 Release
           files: |
             artifacts/bip39-recovery-windows/bip39_recovery-windows.exe
             artifacts/bip39-recovery-linux/bip39_recovery-linux
