@@ -65,7 +65,7 @@ jobs:
       - name: Build with Nuitka
         run: |
           python -m nuitka --onefile `
-            --yes `
+            --y `
             --windows-console-mode=disable `
             --enable-plugin=pyside6 `
             --include-data-file=english.txt=english.txt `
@@ -81,7 +81,7 @@ jobs:
           name: bip39-recovery-windows
           path: bip39_recovery-windows.exe
 
-    # ------------------- Linux 构建 (使用 Docker) -------------------
+      # ------------------- Linux 构建 (使用 Docker) -------------------
   build-linux:
     runs-on: ubuntu-latest
     steps:
@@ -96,10 +96,11 @@ jobs:
 
       - name: Run Nuitka inside Docker as current user
         run: |
+          # 核心修复：将注释放在 YAML 层面，而不是 shell 命令内部
+          # 下面的命令将为 Nuitka 指定一个在挂载卷内的、可写的缓存目录
           docker run --rm \
             --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}:/app \
-            # 核心修复：为 Nuitka 指定一个在挂载卷内的、可写的缓存目录
             -e NUITKA_CACHE_DIR=/app/.nuitka-cache \
             bip39-builder python3 -m nuitka \
               --onefile \
