@@ -27,10 +27,40 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies
+      # ------------------- 缓存并预下载 Dependency Walker -------------------
+      - name: Cache Dependency Walker
+        id: dw_cache
+        uses: actions/cache@v4
+        with:
+          # Nuitka 寻找 depends.exe 的确切路径
+          path: C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64
+          # 一个相对固定的 key，因为这个工具不常变化
+          key: dependency-walker-${{ runner.os }}-v1
+
+      - name: Download and Install Dependency Walker (if not cached)
+        # 仅在上面的缓存步骤没有命中 (cache-hit != 'true') 时运行
+        if: steps.dw_cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $dependsPath = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+          Write-Host "Cache not found. Downloading Dependency Walker..."
+          New-Item -ItemType Directory -Path $dependsPath -Force
+          Invoke-WebRequest -Uri "https://www.dependencywalker.com/depends22_x64.zip" -OutFile "$dependsPath\depends.zip"
+          Expand-Archive -Path "$dependsPath\depends.zip" -DestinationPath $dependsPath -Force
+          Write-Host "Dependency Walker installed."
+
+      - name: Verify Dependency Walker Installation
+        shell: pwsh
+        run: |
+          Write-Host "Checking for depends.exe..."
+          $dependsPath = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+          Get-ChildItem -Path $dependsPath
+      # ------------------------------------------------------------------
+      - name: Install and Upgrade Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt nuitka
+          pip install -r requirements.txt
+          python -m pip install --upgrade nuitka
 
       - name: Build with Nuitka
         run: |
@@ -42,7 +72,7 @@ jobs:
             --output-filename=bip39_recovery-windows.exe `
             bip39_recovery.py
         env:
-          # 这个环境变量可以保留，但 --yes 参数更具决定性
+          # 这个环境变量现在是备用，因为我们已经预先下载了工具
           NUITKA_ALLOW_DEPENDS_DOWNLOAD: 1
 
       - name: Upload Windows executable
@@ -51,7 +81,7 @@ jobs:
           name: bip39-recovery-windows
           path: bip39_recovery-windows.exe
 
-  # ------------------- Linux 构建 (使用 Docker) -------------------
+    # ------------------- Linux 构建 (使用 Docker) -------------------
   build-linux:
     runs-on: ubuntu-latest
     steps:
@@ -65,19 +95,20 @@ jobs:
         run: docker build -t bip39-builder .
 
       - name: Run Nuitka inside Docker as current user
-        # 核心修改：添加 --user $(id -u):$(id -g)
-        # 这会以当前宿主机用户（runner）的身份在容器内执行命令
-        # 从而保证创建的文件的所有权是正确的
         run: |
-          docker run --rm --user $(id -u):$(id -g) -v ${{ github.workspace }}:/app bip39-builder python3 -m nuitka \
-            --onefile \
-            --enable-plugin=pyside6 \
-            --include-data-file=english.txt=english.txt \
-            --output-filename=bip39_recovery-linux \
-            bip39_recovery.py
+          docker run --rm \
+            --user $(id -u):$(id -g) \
+            -v ${{ github.workspace }}:/app \
+            # 核心修复：为 Nuitka 指定一个在挂载卷内的、可写的缓存目录
+            -e NUITKA_CACHE_DIR=/app/.nuitka-cache \
+            bip39-builder python3 -m nuitka \
+              --onefile \
+              --enable-plugin=pyside6 \
+              --include-data-file=english.txt=english.txt \
+              --output-filename=bip39_recovery-linux \
+              bip39_recovery.py
 
       - name: Set executable permissions
-        # 现在，因为文件的所有者是 runner，这个命令将能成功执行
         run: chmod +x bip39_recovery-linux
 
       - name: Upload Linux executable
