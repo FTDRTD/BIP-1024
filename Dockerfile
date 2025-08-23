@@ -2,14 +2,13 @@
 FROM python:3.12-slim
 
 # 安装 Nuitka 和 PySide6 (Qt6) 运行所需的系统级依赖
-# 这是一个更全面的列表，可以避免未来出现类似的依赖缺失问题
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     patchelf \
     # 修复您日志中直接报错的库 (GLib)
     libglib2.0-0 \
-    # OpenGL 相关的库
-    libgl1-mesa-glx \
+    # OpenGL 相关的库 (这是被修正的行)
+    libgl1 \
     # X11/XCB 窗口系统相关的核心库
     libx11-xcb1 \
     libxcb-xinerama0 \
@@ -33,4 +32,3 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt nuitka
 
 # GitHub Actions 将会通过 volume 挂载源代码到 /app 目录
-# 所以这里不需要 `COPY . .`
