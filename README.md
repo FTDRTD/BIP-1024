@@ -64,28 +64,32 @@ pip install reportlab
 
 ## 使用方法
 
-1. 确保所有必需文件在同一目录下：
-
-   - `main.py`
-   - `english.txt`
-   - `DejaVuSans.ttf`
-   - `DejaVuSans-Bold.ttf`
-2. 运行程序：
-
-```bash
-python main.py
-```
-
-3. 程序将生成 `bip39_dotmap_for_engraving.pdf` 文件
+1.  确保所有必需文件在同一目录下：
+    *   `main.py`
+    *   `english.txt`
+    *   `DejaVuSans.ttf`
+    *   `DejaVuSans-Bold.ttf`
+2.  运行程序：
+    ```bash
+    python main.py
+    ```
+3.  根据提示选择模式：
+    *   输入 `1` 选择 **1-1024** 模式 (11个点)。
+    *   输入 `2` 选择 **1-2048** 模式 (12个点)。
+4.  程序将根据您的选择生成对应的 PDF 文件：
+    *   `bip39_dotmap_1024_for_engraving.pdf` (1024模式)
+    *   `bip39_dotmap_2048_for_engraving.pdf` (2048模式)
 
 ## 输出格式说明
 
 PDF文档包含以下信息：
 
-- 标题：BIP39 Mnemonic DotMap (Manual Recovery Optimized)
-- 点图含义说明
-- 权重顺序说明（1 | 2 | 4 | 8 || 16 | 32 | 64 | 128 || 256 | 512 | 1024）
-- 表格包含：索引号、英文单词、三个点图列（分别对应不同的权重范围）
+*   **标题**: 根据所选模式显示 `BIP39 Mnemonic DotMap (1024 words, 11 dots)` 或 `BIP39 Mnemonic DotMap (2048 words, 12 dots)`。
+*   **点图含义说明**: 解释 ● (实心点) 和 ○ (空心点) 的含义。
+*   **权重顺序说明**:
+    *   **1024 模式 (11 点)**: `1 | 2 | 4 | 8 || 16 | 32 | 64 | 128 || 256 | 512 | 1024`
+    *   **2048 模式 (12 点)**: `1 | 2 | 4 | 8 || 16 | 32 | 64 | 128 || 256 | 512 | 1024 | 2048`
+*   **表格**: 包含索引号、英文单词以及对应点图。
 
 ## 点图解读
 
