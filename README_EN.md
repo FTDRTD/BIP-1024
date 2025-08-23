@@ -6,10 +6,9 @@ A Python tool for generating BIP39 mnemonic dot maps, specifically optimized for
 
 ## Project Overview
 
-This project includes two main features:
+This project includes the main feature:
 
 - **BIP39 DotMap Generator**: Used to generate BIP39 mnemonic dot maps, specifically optimized for physical engraving and manual recovery scenarios.
-- **BIP39 Recovery**: Used to manually recover BIP39 mnemonics through dot maps.
 
 ## Features
 
@@ -31,8 +30,10 @@ This project includes two main features:
 
 - `main.py` - Main program file
 - `english.txt` - BIP39 English word list (2048 words)
+- `requirements.txt` - Python dependencies list
 - `DejaVuSans.ttf` - Regular font file
 - `DejaVuSans-Bold.ttf` - Bold font file
+- `msyh.ttc` - Chinese font file (Microsoft YaHei)
 - `bip39_dotmap_for_engraving.pdf` - Generated PDF output file
 
 ## System Requirements
@@ -49,6 +50,14 @@ This project includes two main features:
 2.  Install ReportLab 3.0+
 
 ### Installation
+
+Install dependencies using requirements.txt:
+
+```bash
+pip install -r requirements.txt
+```
+
+Or install ReportLab manually:
 
 ```bash
 pip install reportlab
@@ -135,7 +144,7 @@ If you have any questions or suggestions, please feel free to submit them.
 1. Ensure all dependencies are installed.
 2. Run the program without an internet connection to guarantee the program has no backdoors and runs 100% offline.
 
-The program will generate `bip39_dotmap_for_engraving.pdf` file. To ensure the program has no backdoors and runs 100% offline, run the program without an internet connection.
+The program will generate `bip39_dotmap_for_engraving.pdf`.
 
 ---
 

@@ -5,10 +5,9 @@
 
 ## 项目简介
 
-本项目包含两个主要功能：
+本项目的主要功能：
 
 - **BIP39 DotMap Generator**: 用于生成 BIP39 助记词点图，专为物理雕刻和手动恢复场景优化。
-- **BIP39 Recovery**: 用于通过点图手动恢复 BIP39 助记词。
 
 ## 功能特性
 
@@ -30,8 +29,10 @@
 
 - `main.py` - 主程序文件
 - `english.txt` - BIP39英文单词列表（2048个单词）
+- `requirements.txt` - Python依赖包列表
 - `DejaVuSans.ttf` - 常规字体文件
 - `DejaVuSans-Bold.ttf` - 粗体字体文件
+- `msyh.ttc` - 中文字体文件（微软雅黑）
 - `bip39_dotmap_for_engraving.pdf` - 生成的PDF输出文件
 
 ## 系统要求
@@ -48,6 +49,14 @@
 2. 安装 ReportLab 3.0+
 
 ### 安装依赖
+
+使用 requirements.txt 安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+或手动安装 ReportLab：
 
 ```bash
 pip install reportlab
